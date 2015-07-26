@@ -43,7 +43,7 @@ public final class NativeLibraryManager {
 							Files.walkFileTree(unpacked, new RecursiveEraser());
 						}
 						catch (IOException e) {
-							
+							e.printStackTrace();
 						}
 					}
 				});
