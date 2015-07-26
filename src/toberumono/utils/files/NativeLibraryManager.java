@@ -32,7 +32,7 @@ public final class NativeLibraryManager {
 			else if (os.indexOf("mac") > -1)
 				extension = ".jnilib";
 			else
-				//Because if the os cannot be identified, it is probably a version of linux/unix.
+				//Because if the OS cannot be identified, it is probably a version of linux/unix.
 				extension = ".so";
 			unpacked = getUnpackDirectory();
 			if (unpackedIsTemp) {
