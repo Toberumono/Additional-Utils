@@ -18,6 +18,13 @@ public class RecursiveEraser extends LoggedFileWalker {
 	public static final BiFunction<Path, IOException, FileVisitResult> DEFAULT_ON_FAILURE_ACTION = (p, e) -> FileVisitResult.TERMINATE;
 	
 	/**
+	 * Constructs a new {@link RecursiveEraser} with default values for its onFailure action and log.
+	 */
+	public RecursiveEraser() {
+		this(null, null);
+	}
+	
+	/**
 	 * Constructs a new {@link RecursiveEraser}.<br>
 	 * Both <tt>onFailure</tt> and <tt>log</tt> can be null, in which case their default values will be used.
 	 * 
