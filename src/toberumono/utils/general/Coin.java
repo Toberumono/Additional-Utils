@@ -1,4 +1,4 @@
-package toberumono.additional.utils.general;
+package toberumono.utils.general;
 
 import java.util.Random;
 

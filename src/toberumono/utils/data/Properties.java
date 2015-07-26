@@ -1,4 +1,4 @@
-package toberumono.additional.utils.data;
+package toberumono.utils.data;
 
 import java.io.IOException;
 import java.nio.file.Files;

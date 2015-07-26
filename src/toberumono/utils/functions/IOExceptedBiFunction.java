@@ -1,12 +1,12 @@
-package toberumono.additional.utils.functions;
+package toberumono.utils.functions;
 
 import java.io.IOException;
 
-import toberumono.additional.utils.files.TransferringFileWalker;
+import toberumono.utils.files.TransferFileWalker;
 
 /**
  * A sub-interface of {@link ExceptedBiFunction} specifically for {@link IOException IOExceptions}.<br>
- * Primarily for use with {@link TransferringFileWalker}.
+ * Primarily for use with {@link TransferFileWalker}.
  * 
  * @author Toberumono
  * @param <T>
@@ -15,7 +15,7 @@ import toberumono.additional.utils.files.TransferringFileWalker;
  *            the type of the second argument
  * @param <R>
  *            the type of the returned value
- * @see TransferringFileWalker
+ * @see TransferFileWalker
  */
 @FunctionalInterface
 public interface IOExceptedBiFunction<T, U, R> extends ExceptedBiFunction<T, U, R> {

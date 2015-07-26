@@ -1,4 +1,4 @@
-package toberumono.additional.utils.functions;
+package toberumono.utils.functions;
 
 import java.util.function.BiFunction;
 

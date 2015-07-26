@@ -1,4 +1,4 @@
-package toberumono.additional.utils.data;
+package toberumono.utils.data;
 
 /**
  * Indicates that an error occurred during a conversion operation.

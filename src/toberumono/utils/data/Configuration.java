@@ -1,4 +1,4 @@
-package toberumono.additional.utils.data;
+package toberumono.utils.data;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -7,9 +7,9 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 
-import toberumono.additional.utils.classes.dynamic.Clone;
-import toberumono.additional.utils.classes.dynamic.Copy;
-import toberumono.additional.utils.classes.dynamic.Property;
+import toberumono.utils.classes.dynamic.Clone;
+import toberumono.utils.classes.dynamic.Copy;
+import toberumono.utils.classes.dynamic.Property;
 
 /**
  * This class is designed to facilitate container classes that can be extended quickly and relatively painlessly by using the

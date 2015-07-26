@@ -1,4 +1,4 @@
-package toberumono.additional.utils.classes.dynamic;
+package toberumono.utils.classes.dynamic;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
