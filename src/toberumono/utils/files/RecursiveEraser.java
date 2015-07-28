@@ -10,6 +10,12 @@ import java.util.logging.Logger;
 
 import toberumono.utils.general.MutedLogger;
 
+/**
+ * A simple implementation of {@link LoggedFileWalker} that recursively erases a directory (or file) and all of its contents.
+ * <b>Use with care.</b>
+ * 
+ * @author Toberumono
+ */
 public class RecursiveEraser extends LoggedFileWalker {
 	/**
 	 * The default action to take in {@link #visitFileFailed(Path, IOException)}. It just returns

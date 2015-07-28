@@ -15,12 +15,19 @@ import java.util.Set;
 
 import toberumono.utils.security.NativeLibraryPermission;
 
+/**
+ * A static class that manages native libraries by automatically unpacking them from the classpath (including inside of any
+ * .jar files therein) by default. Naturally, additional sources can be added to the list.<br>
+ * By default, it looks for a "native libraries" subfolder within the root of every .jar file on the classpath and uses those
+ * folders as the sources of native libraries.
+ * 
+ * @author Toberumono
+ */
 public final class NativeLibraryManager {
 	private static final String extension;
 	private static final Set<Path> sources;
 	private static final Set<String> loaded;
 	private static final Path unpacked;
-	private static boolean unpackedIsTemp;
 	
 	static {
 		sources = new HashSet<>();
@@ -34,39 +41,45 @@ public final class NativeLibraryManager {
 			else
 				//Because if the OS cannot be identified, it is probably a version of Linux/Unix.
 				extension = ".so";
-			unpacked = getUnpackDirectory();
-			if (unpackedIsTemp) {
-				Runtime.getRuntime().addShutdownHook(new Thread() {
-					@Override
-					public void run() {
-						try {
-							Files.walkFileTree(unpacked, new RecursiveEraser());
-						}
-						catch (IOException e) {
-							e.printStackTrace();
-						}
-					}
-				});
+			Path test = null;
+			try {
+				test = getUnpackDirectory();
 			}
+			catch (IOException e) {
+				//There's nothing we can do if we cannot create a native libraries folder...
+				e.printStackTrace();
+			}
+			unpacked = test;
+			Runtime.getRuntime().addShutdownHook(new Thread() {
+				@Override
+				public void run() {
+					try {
+						Files.walkFileTree(unpacked, new RecursiveEraser());
+					}
+					catch (SecurityException | IOException e) {
+						e.printStackTrace();
+					}
+				}
+			});
 			loadDefaults();
 		}
 	}
 	
-	private static final Path getUnpackDirectory() {
+	private static final Path getUnpackDirectory() throws IOException {
 		try {
-			unpackedIsTemp = true;
 			return Files.createTempDirectory("natives"); //This is the best option
 		}
 		catch (IOException e) {
-			unpackedIsTemp = false;
 			try {
-				Path temp = Paths.get(NativeLibraryManager.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParent().resolve("natives_failsafe"); //This is an okay option
+				Path temp = Files.createDirectories(Paths.get(NativeLibraryManager.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParent().resolve("natives_failsafe")); //This is an okay option
 				if (Files.isReadable(temp) && Files.isDirectory(temp))
 					return temp;
 			}
-			catch (URISyntaxException e1) {}
+			catch (URISyntaxException | IOException e1) {
+				return Files.createDirectories(Paths.get("natives_failsafe").toAbsolutePath()); //This is a last resort, and probably won't work, but we need a failsafe
+			}
 		}
-		return Paths.get("natives_failsafe").toAbsolutePath(); //This is a last resort, and probably won't work, but we need a failsafe
+		return null;
 	}
 	
 	private static final void loadDefaults() {

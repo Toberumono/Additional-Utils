@@ -10,7 +10,7 @@ import java.lang.annotation.Target;
  * Used to mark fields that should be copied without cloning it when cloning the {@link DynamicCloner} instance it is in.<br>
  * All fields marked with this annotation <i>must</i> be declared as public.
  * 
- * @author Joshua Lipstone
+ * @author Toberumono
  * @see Property
  * @see Clone
  * @see DynamicCloner

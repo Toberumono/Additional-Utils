@@ -3,6 +3,12 @@ package toberumono.utils.general;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * A simple static class to construct a {@link Logger} and mute it before returning it.<br>
+ * Muting consists of disconnecting its parent handlers and setting its level to {@link Level#OFF}.
+ * 
+ * @author Toberumono
+ */
 public final class MutedLogger {
 	
 	private MutedLogger() {/* This is a static class. */}

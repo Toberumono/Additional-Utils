@@ -9,7 +9,7 @@ import java.lang.annotation.Target;
 /**
  * Used to mark fields that should be should be loaded from and saved to disk.
  * 
- * @author Joshua Lipstone
+ * @author Toberumono
  * @see Copy
  * @see Clone
  * @see DynamicCloner

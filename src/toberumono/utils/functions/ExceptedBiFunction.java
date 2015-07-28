@@ -6,7 +6,7 @@ import java.util.function.BiFunction;
  * A simple functional interface that represents the equivalent of {@link java.util.function.BiFunction BiFunction} that can
  * throw an {@link Exception}.
  * 
- * @author Joshua Lipstone
+ * @author Toberumono
  * @param <T>
  *            the type of the first argument
  * @param <U>
