@@ -40,16 +40,9 @@ public class TransferFileWalker extends LoggedFileWalker {
 	@FunctionalInterface
 	public static interface TransferAction extends IOExceptedBiFunction<Path, Path, Path> {}
 	
-	/**
-	 * The default {@link Filter} for {@link TransferFileWalker TransferFileWalkers}. It accepts every file (it just returns
-	 * {@code true}).
-	 */
-	public static final Filter<Path> DEFAULT_FILTER = p -> true;
-	
 	private final Path target;
 	private Path source; //This is determined when it starts walking, so we cannot make it final.
 	private int depth;
-	private final Filter<Path> fileFilter, directoryFilter;
 	private final TransferAction action;
 	
 	/**
@@ -125,22 +118,18 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 */
 	public TransferFileWalker(Path target, TransferAction action, Filter<Path> fileFilter, Filter<Path> directoryFilter,
 			BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log) {
-		super("Started", "Transferred", "Finished", onFailure, log);
+		super("Started", "Transferred", "Finished", fileFilter, directoryFilter, null, onFailure, log);
 		if (target == null)
 			throw new NullPointerException("Cannot have a null target.");
 		this.target = target;
 		if (action == null)
 			throw new NullPointerException("Cannot have a null action.");
 		this.action = action;
-		this.fileFilter = fileFilter == null ? DEFAULT_FILTER : fileFilter;
-		this.directoryFilter = directoryFilter == null ? DEFAULT_FILTER : directoryFilter;
 		this.depth = 0;
 	}
 	
 	@Override
 	public FileVisitResult preVisitDirectoryAction(Path dir, BasicFileAttributes attrs) throws IOException {
-		if (!directoryFilter.apply(dir))
-			return FileVisitResult.SKIP_SUBTREE;
 		if (depth++ == 0) {
 			source = dir;
 			log.info("Started transfer: " + source + " -> " + target);
@@ -151,8 +140,6 @@ public class TransferFileWalker extends LoggedFileWalker {
 	
 	@Override
 	public FileVisitResult visitFileAction(Path file, BasicFileAttributes attrs) throws IOException {
-		if (!fileFilter.apply(file))
-			return FileVisitResult.SKIP_SUBTREE;
 		action.apply(file, target.resolve(source.relativize(file)));
 		return FileVisitResult.CONTINUE;
 	}

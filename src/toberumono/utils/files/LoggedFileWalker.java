@@ -6,10 +6,11 @@ import java.nio.file.FileVisitor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.Objects;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.logging.Logger;
 
+import toberumono.utils.functions.Filter;
 import toberumono.utils.general.MutedLogger;
 
 /**
@@ -23,9 +24,21 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	 * {@link FileVisitResult#CONTINUE}.
 	 */
 	public static final BiFunction<Path, IOException, FileVisitResult> DEFAULT_ON_FAILURE_ACTION = (p, e) -> FileVisitResult.CONTINUE;
+	/**
+	 * The default action to take when a file or directory is skipped. It does nothing.
+	 */
+	public static final Consumer<Path> DEFAULT_ON_SKIP_ACTION = p -> {};
+	
+	/**
+	 * The default {@link Filter} for {@link LoggedFileWalker LoggedFileWalkers}. It accepts every file (it just returns
+	 * {@code true}).
+	 */
+	public static final Filter<Path> DEFAULT_FILTER = p -> true;
 	
 	protected final String preVisitDirectoryPrefix, fileVisitPrefix, postVisitDirectoryPrefix;
-	protected final BiFunction<Path, IOException, FileVisitResult> onFailureAction;
+	protected BiFunction<Path, IOException, FileVisitResult> onFailureAction; //This has to be editable because subclasses may have instance-specific things to track on failure
+	protected Consumer<Path> onSkipAction;
+	protected final Filter<Path> fileFilter, directoryFilter;
 	protected final Logger log;
 	
 	/**
@@ -40,6 +53,12 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	 *            the prefix for the log line for {@link #visitFile(Path, BasicFileAttributes)}
 	 * @param postVisitDirectoryPrefix
 	 *            the prefix for the log line for {@link #postVisitDirectory(Path, IOException)}
+	 * @param fileFilter
+	 *            a {@link Filter} for whether a given file should be processed. Default: {@link #DEFAULT_FILTER}
+	 * @param directoryFilter
+	 *            a {@link Filter} for whether a given directory should be processed. Default: {@link #DEFAULT_FILTER}
+	 * @param onSkipAction
+	 *            an action to perform when a file or directory is skipped
 	 * @param onFailureAction
 	 *            the action to take if a file visit fails or an exception is thrown while traversing a directory. Default:
 	 *            {@link #DEFAULT_ON_FAILURE_ACTION}
@@ -48,10 +67,14 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	 * @see Files#copy(Path, Path, java.nio.file.CopyOption...)
 	 * @see Files#move(Path, Path, java.nio.file.CopyOption...)
 	 */
-	public LoggedFileWalker(String preVisitDirectoryPrefix, String fileVisitPrefix, String postVisitDirectoryPrefix, BiFunction<Path, IOException, FileVisitResult> onFailureAction, Logger log) {
+	public LoggedFileWalker(String preVisitDirectoryPrefix, String fileVisitPrefix, String postVisitDirectoryPrefix, Filter<Path> fileFilter, Filter<Path> directoryFilter,
+			Consumer<Path> onSkipAction, BiFunction<Path, IOException, FileVisitResult> onFailureAction, Logger log) {
 		this.preVisitDirectoryPrefix = preVisitDirectoryPrefix + ": ";
 		this.fileVisitPrefix = fileVisitPrefix + ": ";
 		this.postVisitDirectoryPrefix = postVisitDirectoryPrefix + ": ";
+		this.fileFilter = fileFilter == null ? DEFAULT_FILTER : fileFilter;
+		this.directoryFilter = directoryFilter == null ? DEFAULT_FILTER : directoryFilter;
+		this.onSkipAction = onSkipAction == null ? DEFAULT_ON_SKIP_ACTION : onSkipAction;
 		this.onFailureAction = onFailureAction == null ? DEFAULT_ON_FAILURE_ACTION : onFailureAction;
 		this.log = log == null ? MutedLogger.getMutedLogger() : log;
 	}
@@ -65,11 +88,12 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	 */
 	@Override
 	public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-		FileVisitResult result = preVisitDirectoryAction(dir, attrs);
-		if (Objects.requireNonNull(result) == FileVisitResult.SKIP_SUBTREE)
+		if (!directoryFilter.apply(dir)) {
 			log.info("Skipped: " + dir);
-		else
-			log.info(preVisitDirectoryPrefix + dir);
+			return FileVisitResult.SKIP_SUBTREE;
+		}
+		FileVisitResult result = preVisitDirectoryAction(dir, attrs);
+		log.info(preVisitDirectoryPrefix + dir);
 		return result;
 	}
 	
@@ -100,11 +124,12 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	 */
 	@Override
 	public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-		FileVisitResult result = visitFileAction(file, attrs);
-		if (Objects.requireNonNull(result) == FileVisitResult.SKIP_SUBTREE)
+		if (!fileFilter.apply(file)) {
 			log.info("Skipped: " + file);
-		else
-			log.info(fileVisitPrefix + file);
+			return FileVisitResult.CONTINUE;
+		}
+		FileVisitResult result = visitFileAction(file, attrs);
+		log.info(fileVisitPrefix + file);
 		return result;
 	}
 	
@@ -166,10 +191,7 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	@Override
 	public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
 		FileVisitResult result = postVisitDirectoryAction(dir, exc);
-		if (Objects.requireNonNull(result) == FileVisitResult.SKIP_SUBTREE)
-			log.info("Skipped: " + dir);
-		else
-			log.info(postVisitDirectoryPrefix + dir);
+		log.info(postVisitDirectoryPrefix + dir);
 		return result;
 	}
 	
