@@ -149,7 +149,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 		if (exc != null)
 			onFailure(dir, exc);
 		if (--depth == 0) {
-			if (exc != null)
+			if (exc == null)
 				log.info("Completed transfer: " + source + " -> " + target);
 			else
 				log.warning("Failed transfer: " + source + " -> " + target);
