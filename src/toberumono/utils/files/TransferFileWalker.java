@@ -2,6 +2,7 @@ package toberumono.utils.files;
 
 import java.io.IOException;
 import java.nio.file.CopyOption;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileVisitor;
 import java.nio.file.Files;
@@ -40,8 +41,23 @@ public class TransferFileWalker extends LoggedFileWalker {
 	@FunctionalInterface
 	public static interface TransferAction extends IOExceptedBiFunction<Path, Path, Path> {}
 	
+	/**
+	 * A {@link TransferAction} that creates a symlink, overwriting existing files if necessary.
+	 */
+	public static final TransferAction SYMLINK = (s, t) -> {
+		try {
+			return Files.createSymbolicLink(t, s.toRealPath());
+		}
+		catch (FileAlreadyExistsException e) {
+			if (Files.isSameFile(s, t))
+				return t;
+			Files.delete(t);
+			return Files.createSymbolicLink(t, s.toRealPath());
+		}
+	};
+	
 	private final Path target;
-	private Path source; //This is determined when it starts walking, so we cannot make it final.
+	private Path source;//This is determined when it starts walking, so we cannot make it final.
 	private int depth;
 	private final TransferAction action;
 	
