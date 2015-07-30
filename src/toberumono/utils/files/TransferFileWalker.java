@@ -1,14 +1,11 @@
 package toberumono.utils.files;
 
 import java.io.IOException;
-import java.nio.file.CopyOption;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileVisitor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileAttribute;
 import java.util.function.BiFunction;
 import java.util.logging.Logger;
 
@@ -22,10 +19,7 @@ import toberumono.utils.general.MutedLogger;
  * an {@link IOException}, really) the files within the source tree to the target tree.
  * 
  * @author Toberumono
- * @see Files#copy(Path, Path, CopyOption...)
- * @see Files#move(Path, Path, CopyOption...)
- * @see Files#createLink(Path, Path)
- * @see Files#createSymbolicLink(Path, Path, FileAttribute...)
+ * @see BasicTransferActions
  */
 public class TransferFileWalker extends LoggedFileWalker {
 	/**
@@ -39,22 +33,18 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 * @see TransferFileWalker#TransferFileWalker(Path, TransferAction, Filter, Filter, BiFunction, Logger)
 	 */
 	@FunctionalInterface
-	public static interface TransferAction extends IOExceptedBiFunction<Path, Path, Path> {}
-	
-	/**
-	 * A {@link TransferAction} that creates a symlink, overwriting existing files if necessary.
-	 */
-	public static final TransferAction SYMLINK = (s, t) -> {
-		try {
-			return Files.createSymbolicLink(t, s.toRealPath());
-		}
-		catch (FileAlreadyExistsException e) {
-			if (Files.isSameFile(s, t))
-				return t;
-			Files.delete(t);
-			return Files.createSymbolicLink(t, s.toRealPath());
-		}
-	};
+	public static interface TransferAction extends IOExceptedBiFunction<Path, Path, Path> {
+		/**
+		 * Transfers the file at <tt>source</tt> to <tt>target</tt>
+		 * 
+		 * @param source
+		 *            the source {@link Path}
+		 * @param target
+		 *            the target {@link Path}
+		 */
+		@Override
+		public Path apply(Path source, Path target) throws IOException;
+	}
 	
 	private final Path target;
 	private Path source;//This is determined when it starts walking, so we cannot make it final.
@@ -72,10 +62,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 * @param action
 	 *            the action to use to transfer each file into the new directory tree. Generally, using {@code Files::copy}
 	 *            or {@code Files::move} is sufficient.
-	 * @see Files#copy(Path, Path, CopyOption...)
-	 * @see Files#move(Path, Path, CopyOption...)
-	 * @see Files#createLink(Path, Path)
-	 * @see Files#createSymbolicLink(Path, Path, FileAttribute...)
+	 * @see BasicTransferActions
 	 */
 	public TransferFileWalker(Path target, TransferAction action) {
 		this(target, action, null, null, null);
@@ -99,10 +86,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 *            the action to take if a file visit fails. Default: {@link #DEFAULT_ON_FAILURE_ACTION}
 	 * @param log
 	 *            the {@link Logger} to use for logging. Default: {@link MutedLogger#getMutedLogger()}
-	 * @see Files#copy(Path, Path, CopyOption...)
-	 * @see Files#move(Path, Path, CopyOption...)
-	 * @see Files#createLink(Path, Path)
-	 * @see Files#createSymbolicLink(Path, Path, FileAttribute...)
+	 * @see BasicTransferActions
 	 */
 	public TransferFileWalker(Path target, TransferAction action, Filter<Path> filter, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log) {
 		this(target, action, filter, filter, onFailure, log);
@@ -127,10 +111,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 *            the action to take if a file visit fails. Default: {@link #DEFAULT_ON_FAILURE_ACTION}
 	 * @param log
 	 *            the {@link Logger} to use for logging. Default: {@link MutedLogger#getMutedLogger()}
-	 * @see Files#copy(Path, Path, CopyOption...)
-	 * @see Files#move(Path, Path, CopyOption...)
-	 * @see Files#createLink(Path, Path)
-	 * @see Files#createSymbolicLink(Path, Path, FileAttribute...)
+	 * @see BasicTransferActions
 	 */
 	public TransferFileWalker(Path target, TransferAction action, Filter<Path> fileFilter, Filter<Path> directoryFilter,
 			BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log) {
