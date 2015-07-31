@@ -13,12 +13,13 @@ import toberumono.utils.classes.dynamic.Property;
 
 /**
  * This class is designed to facilitate container classes that can be extended quickly and relatively painlessly by using the
- * reflections API and the {@link Property}, {@link Clone}, and {@link Copy} annotations to dynamically create the copy
- * constructor and the {@link #equals(Object)}, {@link #load(Properties)}, and {@link #save(Writer)} methods for all of
- * its subclasses at runtime.
+ * reflections API and marking fields with the {@link Property}, {@link Clone}, and {@link Copy} annotations to dynamically
+ * create the copy constructor (which calls {@link #transferFields(Configuration, Configuration)}) and the
+ * {@link #equals(Object)}, {@link #load(Properties)}, and {@link #save(Writer)} methods for all of its subclasses at
+ * runtime.
  *
  * @author Toberumono
- * @version 1.0
+ * @version 1.1
  * @see Property
  * @see Clone
  * @see Copy

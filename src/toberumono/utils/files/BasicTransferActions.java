@@ -42,13 +42,13 @@ public enum BasicTransferActions implements TransferAction {
 	@Override
 	public Path apply(Path s, Path t) throws IOException {
 		try {
-			return action.apply(t, s.toRealPath());
+			return action.apply(s.toRealPath(), t);
 		}
 		catch (FileAlreadyExistsException e) {
 			if (Files.isSameFile(s, t))
 				return t;
 			Files.delete(t);
-			return action.apply(t, s.toRealPath());
+			return action.apply(s.toRealPath(), t);
 		}
 	}
 }
