@@ -47,6 +47,6 @@ public class Calendars {
 	 * @return the {@link String} with the calendar markers replaced with the appropriate values
 	 */
 	public static String writeCalendarToString(String input, Calendar cal) {
-		return String.format(Pattern.compile("%([\\Q-#+ 0,(\\E]*?[tT])").matcher(input).replaceAll("%\\$1$1"), cal);
+		return String.format(Pattern.compile("%([\\Q-#+ 0,(\\E]*?[tT])").matcher(input).replaceAll("%1\\$$1"), cal);
 	}
 }
