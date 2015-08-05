@@ -16,7 +16,7 @@ public class Calendars {
 	 * 
 	 * @param cal
 	 *            the {@link Calendar} from which to get the year
-	 * @return the last two digits of the year (e.g. 2015 -&gt; 15)
+	 * @return the last two digits of the year (e.g. 2015 --&gt; 15)
 	 */
 	public static int getShortYear(Calendar cal) {
 		String year = String.valueOf(cal.get(Calendar.YEAR));
