@@ -30,7 +30,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 * @author Toberumono
 	 * @see TransferFileWalker#TransferFileWalker(Path, TransferAction)
 	 * @see TransferFileWalker#TransferFileWalker(Path, TransferAction, Filter, BiFunction, Logger)
-	 * @see TransferFileWalker#TransferFileWalker(Path, TransferAction, Filter, Filter, BiFunction, Logger)
+	 * @see TransferFileWalker#TransferFileWalker(Path, TransferAction, Filter, Filter, BiFunction, Logger, boolean)
 	 */
 	@FunctionalInterface
 	public static interface TransferAction extends IOExceptedBiFunction<Path, Path, Path> {
@@ -50,6 +50,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 	private Path source;//This is determined when it starts walking, so we cannot make it final.
 	private int depth;
 	private final TransferAction action;
+	private final boolean forceRoot;
 	
 	/**
 	 * Construct a new {@link TransferFileWalker} with the given <tt>target</tt> and <tt>action</tt>.<br>
@@ -89,7 +90,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 * @see BasicTransferActions
 	 */
 	public TransferFileWalker(Path target, TransferAction action, Filter<Path> filter, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log) {
-		this(target, action, filter, filter, onFailure, log);
+		this(target, action, filter, filter, onFailure, log, false);
 	}
 	
 	/**
@@ -111,10 +112,13 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 *            the action to take if a file visit fails. Default: {@link #DEFAULT_ON_FAILURE_ACTION}
 	 * @param log
 	 *            the {@link Logger} to use for logging. Default: {@link MutedLogger#getMutedLogger()}
+	 * @param forceRoot
+	 *            if true, the {@link TransferFileWalker} will not replicate the directory tree when transferring, and will
+	 *            instead place all encountered files in the folder specified by <tt>target</tt>
 	 * @see BasicTransferActions
 	 */
 	public TransferFileWalker(Path target, TransferAction action, Filter<Path> fileFilter, Filter<Path> directoryFilter,
-			BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log) {
+			BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log, boolean forceRoot) {
 		super("Started", "Transferred", "Finished", fileFilter, directoryFilter, null, onFailure, log);
 		if (target == null)
 			throw new NullPointerException("Cannot have a null target.");
@@ -123,6 +127,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 			throw new NullPointerException("Cannot have a null action.");
 		this.action = action;
 		this.depth = 0;
+		this.forceRoot = forceRoot;
 	}
 	
 	@Override
@@ -130,14 +135,17 @@ public class TransferFileWalker extends LoggedFileWalker {
 		if (depth++ == 0) {
 			source = dir;
 			log.info("Started transfer: " + source + " -> " + target);
+			if (forceRoot)
+				Files.createDirectories(target);
 		}
-		Files.createDirectories(target.resolve(source.relativize(dir)));
+		if (!forceRoot)
+			Files.createDirectories(target.resolve(source.relativize(dir)));
 		return FileVisitResult.CONTINUE;
 	}
 	
 	@Override
 	public FileVisitResult visitFileAction(Path file, BasicFileAttributes attrs) throws IOException {
-		action.apply(file, target.resolve(source.relativize(file)));
+		action.apply(file, forceRoot ? target.resolve(file) : target.resolve(source.relativize(file)));
 		return FileVisitResult.CONTINUE;
 	}
 	

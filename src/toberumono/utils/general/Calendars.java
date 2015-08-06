@@ -2,7 +2,6 @@ package toberumono.utils.general;
 
 import java.util.Calendar;
 import java.util.Formatter;
-import java.util.regex.Pattern;
 
 /**
  * A static class containing a few helper methods for working with {@link Calendar Calendars}.
@@ -47,6 +46,6 @@ public class Calendars {
 	 * @return the {@link String} with the calendar markers replaced with the appropriate values
 	 */
 	public static String writeCalendarToString(String input, Calendar cal) {
-		return String.format(Pattern.compile("%([\\Q-#+ 0,(\\E]*?[tT])").matcher(input).replaceAll("%1\\$$1"), cal);
+		return String.format(input.replaceAll("%([\\Q-#+ 0,(\\E]*?[tT])", "%1\\$$1"), cal);
 	}
 }
