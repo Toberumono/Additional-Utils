@@ -8,9 +8,9 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.logging.Logger;
 
-import toberumono.utils.functions.Filter;
 import toberumono.utils.general.MutedLogger;
 
 /**
@@ -30,15 +30,15 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	public static final Consumer<Path> DEFAULT_ON_SKIP_ACTION = p -> {};
 	
 	/**
-	 * The default {@link Filter} for {@link LoggedFileWalker LoggedFileWalkers}. It accepts every file (it just returns
+	 * The default {@link Predicate} for {@link LoggedFileWalker LoggedFileWalkers}. It accepts every file (it just returns
 	 * {@code true}).
 	 */
-	public static final Filter<Path> DEFAULT_FILTER = p -> true;
+	public static final Predicate<Path> DEFAULT_FILTER = p -> true;
 	
 	protected final String preVisitDirectoryPrefix, fileVisitPrefix, postVisitDirectoryPrefix;
 	protected BiFunction<Path, IOException, FileVisitResult> onFailureAction; //This has to be editable because subclasses may have instance-specific things to track on failure
 	protected Consumer<Path> onSkipAction;
-	protected final Filter<Path> fileFilter, directoryFilter;
+	protected final Predicate<Path> fileFilter, directoryFilter;
 	protected final Logger log;
 	
 	/**
@@ -54,9 +54,9 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	 * @param postVisitDirectoryPrefix
 	 *            the prefix for the log line for {@link #postVisitDirectory(Path, IOException)}
 	 * @param fileFilter
-	 *            a {@link Filter} for whether a given file should be processed. Default: {@link #DEFAULT_FILTER}
+	 *            a {@link Predicate} for whether a given file should be processed. Default: {@link #DEFAULT_FILTER}
 	 * @param directoryFilter
-	 *            a {@link Filter} for whether a given directory should be processed. Default: {@link #DEFAULT_FILTER}
+	 *            a {@link Predicate} for whether a given directory should be processed. Default: {@link #DEFAULT_FILTER}
 	 * @param onSkipAction
 	 *            an action to perform when a file or directory is skipped
 	 * @param onFailureAction
@@ -67,7 +67,7 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	 * @see Files#copy(Path, Path, java.nio.file.CopyOption...)
 	 * @see Files#move(Path, Path, java.nio.file.CopyOption...)
 	 */
-	public LoggedFileWalker(String preVisitDirectoryPrefix, String fileVisitPrefix, String postVisitDirectoryPrefix, Filter<Path> fileFilter, Filter<Path> directoryFilter,
+	public LoggedFileWalker(String preVisitDirectoryPrefix, String fileVisitPrefix, String postVisitDirectoryPrefix, Predicate<Path> fileFilter, Predicate<Path> directoryFilter,
 			Consumer<Path> onSkipAction, BiFunction<Path, IOException, FileVisitResult> onFailureAction, Logger log) {
 		this.preVisitDirectoryPrefix = preVisitDirectoryPrefix + ": ";
 		this.fileVisitPrefix = fileVisitPrefix + ": ";
@@ -88,7 +88,7 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	 */
 	@Override
 	public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-		if (!directoryFilter.apply(dir)) {
+		if (!directoryFilter.test(dir)) {
 			log.info("Skipped: " + dir);
 			return FileVisitResult.SKIP_SUBTREE;
 		}
@@ -124,7 +124,7 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	 */
 	@Override
 	public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-		if (!fileFilter.apply(file)) {
+		if (!fileFilter.test(file)) {
 			log.info("Skipped: " + file);
 			return FileVisitResult.CONTINUE;
 		}

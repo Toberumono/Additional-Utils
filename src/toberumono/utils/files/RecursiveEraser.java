@@ -7,9 +7,9 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.logging.Logger;
 
-import toberumono.utils.functions.Filter;
 import toberumono.utils.general.MutedLogger;
 
 /**
@@ -66,9 +66,9 @@ public class RecursiveEraser extends LoggedFileWalker {
 	 * Both <tt>onFailure</tt> and <tt>log</tt> can be null, in which case their default values will be used.
 	 * 
 	 * @param fileFilter
-	 *            a {@link Filter} for whether a given file should be processed. Default: {@link #DEFAULT_FILTER}
+	 *            a {@link Predicate} for whether a given file should be processed. Default: {@link #DEFAULT_FILTER}
 	 * @param directoryFilter
-	 *            a {@link Filter} for whether a given directory should be processed. Default: {@link #DEFAULT_FILTER}
+	 *            a {@link Predicate} for whether a given directory should be processed. Default: {@link #DEFAULT_FILTER}
 	 * @param onSkip
 	 *            an action to perform when a file or directory is skipped. Default: {@link #DEFAULT_ON_SKIP_ACTION}
 	 * @param onFailure
@@ -76,7 +76,7 @@ public class RecursiveEraser extends LoggedFileWalker {
 	 * @param log
 	 *            the {@link Logger} to use for logging. Default: {@link MutedLogger#getMutedLogger()}
 	 */
-	public RecursiveEraser(Filter<Path> fileFilter, Filter<Path> directoryFilter, Consumer<Path> onSkip, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log) {
+	public RecursiveEraser(Predicate<Path> fileFilter, Predicate<Path> directoryFilter, Consumer<Path> onSkip, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log) {
 		super("Started Deleting", "Deleted", "Finished Deleting", null, null, null, null, log);
 		del = new DeletionBound();
 		this.onFailureAction = constructOnFailure(onFailure);

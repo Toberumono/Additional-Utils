@@ -7,9 +7,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.function.BiFunction;
+import java.util.function.Predicate;
 import java.util.logging.Logger;
 
-import toberumono.utils.functions.Filter;
 import toberumono.utils.functions.IOExceptedBiFunction;
 import toberumono.utils.general.MutedLogger;
 
@@ -29,8 +29,8 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 * 
 	 * @author Toberumono
 	 * @see TransferFileWalker#TransferFileWalker(Path, TransferAction)
-	 * @see TransferFileWalker#TransferFileWalker(Path, TransferAction, Filter, BiFunction, Logger)
-	 * @see TransferFileWalker#TransferFileWalker(Path, TransferAction, Filter, Filter, BiFunction, Logger, boolean)
+	 * @see TransferFileWalker#TransferFileWalker(Path, TransferAction, Predicate, BiFunction, Logger)
+	 * @see TransferFileWalker#TransferFileWalker(Path, TransferAction, Predicate, Predicate, BiFunction, Logger, boolean)
 	 */
 	@FunctionalInterface
 	public static interface TransferAction extends IOExceptedBiFunction<Path, Path, Path> {
@@ -81,7 +81,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 *            the action to use to transfer each file into the new directory tree. Generally, using {@code Files::copy}
 	 *            or {@code Files::move} is sufficient.
 	 * @param filter
-	 *            a {@link Filter} for whether a given file or directory should be transferred. Default:
+	 *            a {@link Predicate} for whether a given file or directory should be transferred. Default:
 	 *            {@link #DEFAULT_FILTER}
 	 * @param onFailure
 	 *            the action to take if a file visit fails. Default: {@link #DEFAULT_ON_FAILURE_ACTION}
@@ -89,7 +89,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 *            the {@link Logger} to use for logging. Default: {@link MutedLogger#getMutedLogger()}
 	 * @see BasicTransferActions
 	 */
-	public TransferFileWalker(Path target, TransferAction action, Filter<Path> filter, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log) {
+	public TransferFileWalker(Path target, TransferAction action, Predicate<Path> filter, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log) {
 		this(target, action, filter, filter, onFailure, log, false);
 	}
 	
@@ -105,9 +105,9 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 *            the action to use to transfer each file into the new directory tree. Generally, using {@code Files::copy}
 	 *            or {@code Files::move} is sufficient.
 	 * @param fileFilter
-	 *            a {@link Filter} for whether a given file should be processed. Default: {@link #DEFAULT_FILTER}
+	 *            a {@link Predicate} for whether a given file should be processed. Default: {@link #DEFAULT_FILTER}
 	 * @param directoryFilter
-	 *            a {@link Filter} for whether a given directory should be processed. Default: {@link #DEFAULT_FILTER}
+	 *            a {@link Predicate} for whether a given directory should be processed. Default: {@link #DEFAULT_FILTER}
 	 * @param onFailure
 	 *            the action to take if a file visit fails. Default: {@link #DEFAULT_ON_FAILURE_ACTION}
 	 * @param log
@@ -117,7 +117,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 *            instead place all encountered files in the folder specified by <tt>target</tt>
 	 * @see BasicTransferActions
 	 */
-	public TransferFileWalker(Path target, TransferAction action, Filter<Path> fileFilter, Filter<Path> directoryFilter,
+	public TransferFileWalker(Path target, TransferAction action, Predicate<Path> fileFilter, Predicate<Path> directoryFilter,
 			BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log, boolean forceRoot) {
 		super("Started", "Transferred", "Finished", fileFilter, directoryFilter, null, onFailure, log);
 		if (target == null)
