@@ -21,6 +21,13 @@ import toberumono.utils.files.TransferFileWalker;
 public interface IOExceptedBiFunction<T, U, R> extends ExceptedBiFunction<T, U, R> {
 	
 	/**
+	 * Applies this function to the given arguments.
+	 *
+	 * @param t
+	 *            the first argument
+	 * @param u
+	 *            the second argument
+	 * @return the function result
 	 * @throws IOException
 	 *             if something goes wrong
 	 */
