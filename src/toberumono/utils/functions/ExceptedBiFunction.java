@@ -3,8 +3,7 @@ package toberumono.utils.functions;
 import java.util.function.BiFunction;
 
 /**
- * A simple functional interface that represents the equivalent of {@link java.util.function.BiFunction BiFunction} that can
- * throw an {@link Exception}.
+ * A simple functional interface that represents the equivalent of {@link BiFunction} that can throw an {@link Exception}.
  * 
  * @author Toberumono
  * @param <T>
@@ -28,8 +27,8 @@ public interface ExceptedBiFunction<T, U, R> {
 	 * @throws Exception
 	 *             if something goes wrong
 	 */
-	R apply(T t, U u) throws Exception;
-	
+			R apply(T t, U u) throws Exception;
+			
 	/**
 	 * Returns a {@link BiFunction} that wraps this {@link ExceptedBiFunction} and returns {@code null} if an
 	 * {@link Exception} would have been thrown and optionally prints the stack trace of said {@link Exception}.
