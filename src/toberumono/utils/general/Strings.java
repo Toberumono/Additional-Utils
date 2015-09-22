@@ -25,23 +25,23 @@ public class Strings {
 		str.chars().forEach(c -> {
 			if (c == '\t')
 				sb.append("\\t");
-				else if (c == '\b')
-					sb.append("\\b");
-				else if (c == '\n')
-					sb.append("\\n");
-				else if (c == '\r')
-					sb.append("\\r");
-				else if (c == '\f')
-					sb.append("\\f");
-				else if (c == '\'')
-					sb.append("\\'");
-				else if (c == '\"')
-					sb.append("\\\"");
-				else if (c == '\\')
-					sb.append("\\\\");
-				else
-					sb.append((char) c);
-			});
+			else if (c == '\b')
+				sb.append("\\b");
+			else if (c == '\n')
+				sb.append("\\n");
+			else if (c == '\r')
+				sb.append("\\r");
+			else if (c == '\f')
+				sb.append("\\f");
+			else if (c == '\'')
+				sb.append("\\'");
+			else if (c == '\"')
+				sb.append("\\\"");
+			else if (c == '\\')
+				sb.append("\\\\");
+			else
+				sb.append((char) c);
+		});
 		return sb.toString();
 	}
 	
