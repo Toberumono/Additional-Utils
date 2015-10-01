@@ -87,6 +87,6 @@ public class Strings {
 		catch (ArrayIndexOutOfBoundsException e) {
 			throw new UnsupportedEncodingException("String cannot end with a \\");
 		}
-		return sb.toString().trim();
+		return sb.toString();
 	}
 }
