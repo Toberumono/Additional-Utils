@@ -11,7 +11,7 @@ public class Numbers {
 	
 	/**
 	 * While this might not be the best name, it is close to the meaning and a bit of a pun, so, it'll stay for now.<br>
-	 * The semifloor is the largest multiple (closest to positive infinity) of floor(base * fraction) &leq; x.<br>
+	 * The semifloor is the largest multiple (closest to positive infinity) of floor(base * fraction) &le; x.<br>
 	 * e.g. {@code semifloor(24, 0.25, 11) = 6} and {@code semifloor(24, 0.5, 11) = 0}
 	 * 
 	 * @param base
