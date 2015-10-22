@@ -20,7 +20,22 @@ public interface ExceptedConsumer<T> {
 	 * @throws Exception
 	 *             if something goes wrong
 	 */
-	public void apply(T t) throws Exception;
+	public void accept(T t) throws Exception;
+	
+	/**
+	 * Applies this function to the given arguments.<br>
+	 * Forwards to {@link #accept(Object)}.
+	 *
+	 * @param t
+	 *            the first argument
+	 * @throws Exception
+	 *             if something goes wrong
+	 * @see #accept(Object)
+	 */
+	@Deprecated
+	public default void apply(T t) throws Exception {
+		accept(t);
+	}
 	
 	/**
 	 * Returns a {@link Consumer} that wraps this {@link ExceptedConsumer} and, if an {@link Exception} is thrown, either
@@ -35,7 +50,7 @@ public interface ExceptedConsumer<T> {
 		if (printStackTrace)
 			return t -> {
 				try {
-					this.apply(t);
+					accept(t);
 				}
 				catch (Exception e) {
 					e.printStackTrace();
@@ -44,7 +59,7 @@ public interface ExceptedConsumer<T> {
 		else
 			return t -> {
 				try {
-					this.apply(t);
+					accept(t);
 				}
 				catch (Exception e) {}
 			};

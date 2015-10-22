@@ -24,7 +24,22 @@ public interface ExceptedBiConsumer<T, U> {
 	 * @throws Exception
 	 *             if something goes wrong
 	 */
-	public void apply(T t, U u) throws Exception;
+	public void accept(T t, U u) throws Exception;
+	
+	/**
+	 * Applies this function to the given arguments.
+	 *
+	 * @param t
+	 *            the first argument
+	 * @param u
+	 *            the second argument
+	 * @throws Exception
+	 *             if something goes wrong
+	 */
+	@Deprecated
+	public default void apply(T t, U u) throws Exception {
+		accept(t, u);
+	}
 	
 	/**
 	 * Returns a {@link BiConsumer} that wraps this {@link ExceptedBiConsumer} and, if an {@link Exception} is thrown, either
@@ -39,7 +54,7 @@ public interface ExceptedBiConsumer<T, U> {
 		if (printStackTrace)
 			return (t, u) -> {
 				try {
-					this.apply(t, u);
+					accept(t, u);
 				}
 				catch (Exception e) {
 					e.printStackTrace();
@@ -48,7 +63,7 @@ public interface ExceptedBiConsumer<T, U> {
 		else
 			return (t, u) -> {
 				try {
-					this.apply(t, u);
+					accept(t, u);
 				}
 				catch (Exception e) {}
 			};
