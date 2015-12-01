@@ -21,20 +21,6 @@ import toberumono.utils.general.MutedLogger;
 public class RecursiveEraser extends LoggedFileWalker {
 	private final DeletionBound del;
 	
-	private static class DeletionBound {
-		int depth, bound;
-		
-		DeletionBound() {
-			depth = 0;
-			bound = 0;
-		}
-		
-		void update() {
-			if (depth > bound)
-				bound = depth;
-		}
-	}
-	
 	/**
 	 * The default action to take in {@link #visitFileFailed(Path, IOException)}. It just returns
 	 * {@link FileVisitResult#TERMINATE}.
@@ -77,26 +63,13 @@ public class RecursiveEraser extends LoggedFileWalker {
 	 *            the {@link Logger} to use for logging. Default: {@link MutedLogger#getMutedLogger()}
 	 */
 	public RecursiveEraser(Predicate<Path> fileFilter, Predicate<Path> directoryFilter, Consumer<Path> onSkip, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log) {
-		super("Started Deleting", "Deleted", "Finished Deleting", null, null, null, null, log);
-		del = new DeletionBound();
-		this.onFailureAction = constructOnFailure(onFailure);
-		this.onSkipAction = constructOnSkip(onSkip);
+		this(fileFilter, directoryFilter, onSkip, onFailure, log, new DeletionBound());
 	}
 	
-	private Consumer<Path> constructOnSkip(Consumer<Path> onSkip) {
-		final Consumer<Path> os = onSkip == null ? DEFAULT_ON_SKIP_ACTION : onSkip;
-		return p -> {
-			del.update();
-			os.accept(p);
-		};
-	}
-	
-	private BiFunction<Path, IOException, FileVisitResult> constructOnFailure(BiFunction<Path, IOException, FileVisitResult> onFailure) {
-		final BiFunction<Path, IOException, FileVisitResult> of = onFailure == null ? DEFAULT_ON_FAILURE_ACTION : onFailure;
-		return (p, e) -> {
-			del.update();
-			return of.apply(p, e);
-		};
+	private RecursiveEraser(Predicate<Path> fileFilter, Predicate<Path> directoryFilter, final Consumer<Path> onSkip, final BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log,
+			final DeletionBound del) {
+		super("Started Deleting", "Deleted", "Finished Deleting", fileFilter, directoryFilter, new OnSkipFunction(onSkip, del), new OnFailureFunction(onFailure, del), log);
+		this.del = del;
 	}
 	
 	@Override
@@ -123,5 +96,51 @@ public class RecursiveEraser extends LoggedFileWalker {
 		if (--del.depth >= del.bound)
 			Files.deleteIfExists(dir);
 		return FileVisitResult.CONTINUE;
+	}
+}
+
+class DeletionBound {
+	int depth, bound;
+	
+	DeletionBound() {
+		depth = 0;
+		bound = 0;
+	}
+	
+	void update() {
+		if (depth > bound)
+			bound = depth;
+	}
+}
+
+class OnSkipFunction implements Consumer<Path> {
+	private final Consumer<Path> os;
+	private final DeletionBound del;
+	
+	OnSkipFunction(Consumer<Path> os, DeletionBound del) {
+		this.os = os == null ? LoggedFileWalker.DEFAULT_ON_SKIP_ACTION : os;
+		this.del = del;
+	}
+	
+	@Override
+	public void accept(Path t) {
+		del.update();
+		os.accept(t);
+	}
+}
+
+class OnFailureFunction implements BiFunction<Path, IOException, FileVisitResult> {
+	private final BiFunction<Path, IOException, FileVisitResult> of;
+	private final DeletionBound del;
+	
+	OnFailureFunction(BiFunction<Path, IOException, FileVisitResult> of, DeletionBound del) {
+		this.of = of == null ? LoggedFileWalker.DEFAULT_ON_FAILURE_ACTION : of;
+		this.del = del;
+	}
+	
+	@Override
+	public FileVisitResult apply(Path t, IOException u) {
+		del.update();
+		return of.apply(t, u);
 	}
 }

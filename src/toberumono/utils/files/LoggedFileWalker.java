@@ -36,8 +36,8 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	public static final Predicate<Path> DEFAULT_FILTER = p -> true;
 	
 	protected final String preVisitDirectoryPrefix, fileVisitPrefix, postVisitDirectoryPrefix;
-	protected BiFunction<Path, IOException, FileVisitResult> onFailureAction; //This has to be editable because subclasses may have instance-specific things to track on failure
-	protected Consumer<Path> onSkipAction;
+	protected final BiFunction<Path, IOException, FileVisitResult> onFailureAction; //This has to be editable because subclasses may have instance-specific things to track on failure
+	protected final Consumer<Path> onSkipAction;
 	protected final Predicate<Path> fileFilter, directoryFilter;
 	protected final Logger log;
 	

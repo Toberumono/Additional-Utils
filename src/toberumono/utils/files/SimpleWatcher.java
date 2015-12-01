@@ -31,28 +31,39 @@ public class SimpleWatcher implements WatchService {
 	public SimpleWatcher(Consumer<WatchKey> action, WatchService service) {
 		core = service;
 		closed = false;
-		watcher = new Thread() {
-			@Override
-			public void run() {
-				for (;;)
-					try {
-						action.accept(core.take());
-					}
-					catch (ClosedWatchServiceException e) {
-						if (!closed)
-							e.printStackTrace();
-						break;
-					}
-					catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-			}
-		};
+		watcher = new SimpleWatcherThread(action);
 		watcher.start();
+	}
+	
+	private class SimpleWatcherThread extends Thread {
+		private final Consumer<WatchKey> action;
+		
+		public SimpleWatcherThread(Consumer<WatchKey> action) {
+			this.action = action;
+		}
+		
+		@Override
+		public void run() {
+			while (!closed)
+				try {
+					action.accept(core.take());
+				}
+				catch (ClosedWatchServiceException e) {
+					if (!closed)
+						e.printStackTrace();
+					break;
+				}
+				catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+		}
 	}
 	
 	@Override
 	public void close() throws IOException {
+		if (closed)
+			return;
+		this.closed = true;
 		core.close(); //This implicitly closes the thread as well
 	}
 	
