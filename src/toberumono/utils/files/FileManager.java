@@ -18,6 +18,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
+import toberumono.utils.functions.IOExceptedConsumer;
+
 import static java.nio.file.StandardWatchEventKinds.*;
 
 /**
@@ -30,8 +32,10 @@ public class FileManager implements Closeable {
 	private final Map<Path, WatchKey> paths;
 	private final PathAdder adder;
 	private final PathRemover remover;
-	private final Consumer<Path> onAddFile, onAddDirectory, onRemoveFile, onRemoveDirectory;
-	private boolean closed;
+	private final IOExceptedConsumer<Path> onAddFile, onAddDirectory, onRemoveFile, onRemoveDirectory;
+	private final IOExceptedConsumer<WatchKey> onChange;
+	private boolean closed, changed;
+	private Set<Path> pathSet = null;
 	
 	/**
 	 * Constructs a {@link FileManager} on the default {@link FileSystem} with the given actions.
@@ -45,6 +49,75 @@ public class FileManager implements Closeable {
 	 * @throws IOException
 	 *             if an I/O error occurs while initializing the {@link WatchService}
 	 */
+	public FileManager(IOExceptedConsumer<Path> onAdd, IOExceptedConsumer<Path> onRemove, IOExceptedConsumer<WatchKey> onChange) throws IOException {
+		this(onAdd, onRemove, onChange, FileSystems.getDefault());
+	}
+	
+	/**
+	 * Constructs a {@link FileManager} on the given {@link FileSystem} with the given actions.
+	 * 
+	 * @param onAdd
+	 *            the function to call on newly added {@link Path Paths} (applies to both files and directories)
+	 * @param onRemove
+	 *            the function to call on newly removed {@link Path Paths} (applies to both files and directories)
+	 * @param onChange
+	 *            the function to call when the {@link WatchService} detects a change in the managed directories
+	 * @param fs
+	 *            the {@link FileSystem} that the {@link WatchService} will be monitoring
+	 * @throws IOException
+	 *             if an I/O error occurs while initializing the {@link WatchService}
+	 */
+	public FileManager(IOExceptedConsumer<Path> onAdd, IOExceptedConsumer<Path> onRemove, IOExceptedConsumer<WatchKey> onChange, FileSystem fs) throws IOException {
+		this(onAdd, onAdd, onRemove, onRemove, onChange, fs);
+	}
+	
+	/**
+	 * Construct a {@link FileManager} on the given {@link FileSystem} with the given actions.
+	 * 
+	 * @param onAddFile
+	 *            the function to call on newly added files
+	 * @param onAddDirectory
+	 *            the function to call on newly added directories
+	 * @param onRemoveFile
+	 *            the function to call on newly removed files
+	 * @param onRemoveDirectory
+	 *            the function to call on newly removed directories
+	 * @param onChange
+	 *            the function to call when the {@link WatchService} detects a change in the managed directories
+	 * @param fs
+	 *            the {@link FileSystem} that the {@link WatchService} will be monitoring
+	 * @throws IOException
+	 *             if an I/O error occurs while initializing the {@link WatchService}
+	 */
+	public FileManager(IOExceptedConsumer<Path> onAddFile, IOExceptedConsumer<Path> onAddDirectory, IOExceptedConsumer<Path> onRemoveFile, IOExceptedConsumer<Path> onRemoveDirectory,
+			IOExceptedConsumer<WatchKey> onChange, FileSystem fs)
+					throws IOException {
+		paths = new LinkedHashMap<>();
+		watcher = new SimpleWatcher(this::onChange, fs.newWatchService());
+		adder = new PathAdder();
+		remover = new PathRemover();
+		closed = false;
+		changed = false;
+		this.onAddFile = onAddFile;
+		this.onAddDirectory = onAddDirectory;
+		this.onChange = onChange;
+		this.onRemoveFile = onRemoveFile;
+		this.onRemoveDirectory = onRemoveDirectory;
+	}
+	
+	/**
+	 * Constructs a {@link FileManager} on the default {@link FileSystem} with the given actions.
+	 * 
+	 * @param onAdd
+	 *            the function to call on newly added {@link Path Paths} (applies to both files and directories)
+	 * @param onRemove
+	 *            the function to call on newly removed {@link Path Paths} (applies to both files and directories)
+	 * @param onChange
+	 *            the function to call when the {@link WatchService} detects a change in the managed directories
+	 * @throws IOException
+	 *             if an I/O error occurs while initializing the {@link WatchService}
+	 */
+	@Deprecated
 	public FileManager(Consumer<Path> onAdd, Consumer<Path> onRemove, Consumer<WatchKey> onChange) throws IOException {
 		this(onAdd, onRemove, onChange, FileSystems.getDefault());
 	}
@@ -63,6 +136,7 @@ public class FileManager implements Closeable {
 	 * @throws IOException
 	 *             if an I/O error occurs while initializing the {@link WatchService}
 	 */
+	@Deprecated
 	public FileManager(Consumer<Path> onAdd, Consumer<Path> onRemove, Consumer<WatchKey> onChange, FileSystem fs) throws IOException {
 		this(onAdd, onAdd, onRemove, onRemove, onChange, fs);
 	}
@@ -85,17 +159,11 @@ public class FileManager implements Closeable {
 	 * @throws IOException
 	 *             if an I/O error occurs while initializing the {@link WatchService}
 	 */
-	public FileManager(Consumer<Path> onAddFile, Consumer<Path> onAddDirectory, Consumer<Path> onRemoveFile, Consumer<Path> onRemoveDirectory, Consumer<WatchKey> onChange, FileSystem fs)
-			throws IOException {
-		paths = new LinkedHashMap<>();
-		watcher = new SimpleWatcher(onChange, fs.newWatchService());
-		adder = new PathAdder();
-		remover = new PathRemover();
-		closed = false;
-		this.onAddFile = onAddFile;
-		this.onAddDirectory = onAddDirectory;
-		this.onRemoveFile = onRemoveFile;
-		this.onRemoveDirectory = onRemoveDirectory;
+	@Deprecated
+	public FileManager(Consumer<Path> onAddFile, Consumer<Path> onAddDirectory, Consumer<Path> onRemoveFile, Consumer<Path> onRemoveDirectory,
+			Consumer<WatchKey> onChange, FileSystem fs)
+					throws IOException {
+		this((IOExceptedConsumer<Path>) p -> onAddFile.accept(p), p -> onAddDirectory.accept(p), p -> onRemoveFile.accept(p), p -> onRemoveDirectory.accept(p), k -> onChange.accept(k), fs);
 	}
 	
 	/**
@@ -105,18 +173,92 @@ public class FileManager implements Closeable {
 	 * 
 	 * @param path
 	 *            the {@link Path} to add to the {@link FileManager}
+	 * @return {@code true} if a {@link Path} was added
 	 * @throws IOException
 	 *             if an I/O error occurs while adding the {@link Path}
 	 */
-	public synchronized void add(Path path) throws IOException {
+	public synchronized boolean add(Path path) throws IOException {
 		if (closed)
 			throw new ClosedFileManagerException();
 		if (paths.containsKey(path))
-			return;
+			return false;
 		if (!Files.isDirectory(path))
 			register(path);
 		else
 			Files.walkFileTree(path, adder);
+		boolean didchange = changed;
+		changed = false;
+		return didchange;
+	}
+	
+	/**
+	 * By default, this simply forwards to the onAddFile method passed to the constructor.<br>
+	 * This is implemented for overriding by more complex subclasses that need easier access to instance variables than
+	 * lambdas can offer.
+	 * 
+	 * @param path
+	 *            the {@link Path} to the file
+	 * @throws IOException
+	 *             if an I/O error occurs
+	 */
+	protected void onAddFile(Path path) throws IOException {
+		onAddFile.accept(path);
+	}
+	
+	/**
+	 * By default, this simply forwards to the onAddDirectory method passed to the constructor.<br>
+	 * This is implemented for overriding by more complex subclasses that need easier access to instance variables than
+	 * lambdas can offer.
+	 * 
+	 * @param path
+	 *            the {@link Path} to the file
+	 * @throws IOException
+	 *             if an I/O error occurs
+	 */
+	protected void onAddDirectory(Path path) throws IOException {
+		onAddDirectory.accept(path);
+	}
+	
+	/**
+	 * By default, this simply forwards to the onChange method passed to the constructor.<br>
+	 * This is implemented for overriding by more complex subclasses that need easier access to instance variables than
+	 * lambdas can offer.
+	 * 
+	 * @param key
+	 *            the {@link WatchKey} that noticed the change
+	 * @throws IOException
+	 *             if an I/O error occurs
+	 */
+	protected void onChange(WatchKey key) throws IOException {
+		onChange.accept(key);
+	}
+	
+	/**
+	 * By default, this simply forwards to the onRemoveFile method passed to the constructor.<br>
+	 * This is implemented for overriding by more complex subclasses that need easier access to instance variables than
+	 * lambdas can offer.
+	 * 
+	 * @param path
+	 *            the {@link Path} to the file
+	 * @throws IOException
+	 *             if an I/O error occurs
+	 */
+	protected void onRemoveFile(Path path) throws IOException {
+		onRemoveFile.accept(path);
+	}
+	
+	/**
+	 * By default, this simply forwards to the onRemoveDirectory method passed to the constructor.<br>
+	 * This is implemented for overriding by more complex subclasses that need easier access to instance variables than
+	 * lambdas can offer.
+	 * 
+	 * @param path
+	 *            the {@link Path} to the file
+	 * @throws IOException
+	 *             if an I/O error occurs
+	 */
+	protected void onRemoveDirectory(Path path) throws IOException {
+		onRemoveDirectory.accept(path);
 	}
 	
 	/**
@@ -124,15 +266,19 @@ public class FileManager implements Closeable {
 	 * 
 	 * @param path
 	 *            the {@link Path} to remove from the {@link FileManager}
+	 * @return {@code true} if a {@link Path} was removed
 	 * @throws IOException
 	 *             if an I/O error occurs while removing the {@link Path}
 	 */
-	public synchronized void remove(Path path) throws IOException {
+	public synchronized boolean remove(Path path) throws IOException {
 		if (closed)
 			throw new ClosedFileManagerException();
 		if (!paths.containsKey(path))
-			return;
+			return false;
 		Files.walkFileTree(path, remover);
+		boolean didchange = changed;
+		changed = false;
+		return didchange;
 	}
 	
 	/**
@@ -141,19 +287,23 @@ public class FileManager implements Closeable {
 	public Set<Path> getPaths() {
 		if (closed)
 			throw new ClosedFileManagerException();
-		return Collections.unmodifiableSet(paths.keySet());
+		if (pathSet == null)
+			pathSet = Collections.unmodifiableSet(paths.keySet());
+		return pathSet;
 	}
 	
 	private void register(Path path) throws IOException {
 		if (closed)
 			throw new ClosedFileManagerException();
 		paths.put(path, path.register(watcher, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY));
+		changed = true;
 	}
 	
 	private void deregister(Path path) {
 		if (closed)
 			throw new ClosedFileManagerException();
 		paths.remove(path).cancel();
+		changed = true;
 	}
 	
 	private class PathAdder extends SimpleFileVisitor<Path> {
@@ -163,7 +313,7 @@ public class FileManager implements Closeable {
 			if (paths.containsKey(dir))
 				return FileVisitResult.SKIP_SUBTREE;
 			register(dir);
-			onAddDirectory.accept(dir);
+			onAddDirectory(dir);
 			return FileVisitResult.CONTINUE;
 		}
 		
@@ -172,7 +322,7 @@ public class FileManager implements Closeable {
 			if (paths.containsKey(file))
 				deregister(file);
 			else
-				onAddFile.accept(file);
+				onAddFile(file);
 			return FileVisitResult.CONTINUE;
 		}
 	}
@@ -191,14 +341,14 @@ public class FileManager implements Closeable {
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 			if (paths.containsKey(file)) {
 				deregister(file);
-				onRemoveFile.accept(file);
+				onRemoveFile(file);
 			}
 			return FileVisitResult.CONTINUE;
 		}
 		
 		@Override
-		public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
-			onRemoveDirectory.accept(dir);
+		public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+			onRemoveDirectory(dir);
 			return FileVisitResult.CONTINUE;
 		}
 	}
@@ -209,11 +359,29 @@ public class FileManager implements Closeable {
 			return;
 		closed = true;
 		Iterator<Map.Entry<Path, WatchKey>> iter = paths.entrySet().iterator();
+		IOException except = null;
 		while (iter.hasNext()) {
 			Map.Entry<Path, WatchKey> removed = iter.next();
+			Path p = removed.getKey();
+			try {
+				if (Files.isDirectory(p))
+					onRemoveDirectory(p);
+				else
+					onRemoveFile(p);
+			}
+			catch (IOException e) {
+				e.printStackTrace();
+				if (except == null)
+					except = e;
+			}
 			removed.getValue().cancel();
-			iter.remove();
+			try {
+				iter.remove();
+			}
+			catch (UnsupportedOperationException e) {}
 		}
 		watcher.close();
+		if (except != null)
+			throw except;
 	}
 }
