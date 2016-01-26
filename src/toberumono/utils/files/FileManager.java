@@ -296,9 +296,8 @@ public class FileManager implements Closeable {
 		if (closed)
 			return;
 		closed = true;
-		Iterator<Map.Entry<Path, WatchKey>> iter = paths.entrySet().iterator();
 		IOException except = null;
-		while (iter.hasNext()) {
+		for (Iterator<Map.Entry<Path, WatchKey>> iter = paths.entrySet().iterator(); iter.hasNext();) {
 			Map.Entry<Path, WatchKey> removed = iter.next();
 			Path p = removed.getKey();
 			try {
