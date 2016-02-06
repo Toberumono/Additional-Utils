@@ -46,7 +46,7 @@ public interface ExceptedConsumer<T> {
 	 *            wrapper
 	 * @return a {@link Consumer} that wraps this {@link ExceptedConsumer}
 	 */
-	public default Consumer<T> toBiConsumer(boolean printStackTrace) {
+	public default Consumer<T> toConsumer(boolean printStackTrace) {
 		if (printStackTrace)
 			return t -> {
 				try {

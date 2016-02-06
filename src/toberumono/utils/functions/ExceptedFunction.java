@@ -34,7 +34,7 @@ public interface ExceptedFunction<T, R> {
 	 *            wrapper
 	 * @return a {@link Function} that wraps this {@link ExceptedFunction}
 	 */
-	public default Function<T, R> toBiFunction(boolean printStackTrace) {
+	public default Function<T, R> toFunction(boolean printStackTrace) {
 		if (printStackTrace)
 			return t -> {
 				try {
