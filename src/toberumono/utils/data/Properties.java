@@ -24,7 +24,7 @@ public class Properties extends HashMap<String, String> {
 			return Integer.parseInt(s);
 		}
 		catch (NumberFormatException e) {
-			return (Integer) d;
+			return d;
 		}
 	};
 	private static final BiFunction<String, Long, Long> toLong = (s, d) -> {
@@ -32,7 +32,7 @@ public class Properties extends HashMap<String, String> {
 			return Long.parseLong(s);
 		}
 		catch (NumberFormatException e) {
-			return (Long) d;
+			return d;
 		}
 	};
 	private static final BiFunction<String, Double, Double> toDouble = (s, d) -> {
@@ -40,7 +40,7 @@ public class Properties extends HashMap<String, String> {
 			return Double.parseDouble(s);
 		}
 		catch (NumberFormatException e) {
-			return (Double) d;
+			return d;
 		}
 	};
 	private static final BiFunction<String, Boolean, Boolean> toBoolean = (s, d) -> {
@@ -139,7 +139,7 @@ public class Properties extends HashMap<String, String> {
 	 */
 	public <T> T get(String key, Class<T> type, T def) {
 		@SuppressWarnings("unchecked")
-		T out = (T) ((BiFunction<String, T, T>) converters.get(type)).apply(get(key), def);
+		T out = ((BiFunction<String, T, T>) converters.get(type)).apply(get(key), def);
 		return out;
 	}
 	
