@@ -7,15 +7,21 @@ import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.Set;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import toberumono.utils.functions.IOExceptedConsumer;
 
@@ -29,11 +35,10 @@ import static java.nio.file.StandardWatchEventKinds.*;
 public class FileManager implements Closeable {
 	private final WatchService watcher;
 	private final Map<Path, WatchKey> paths;
-	private final PathAdder adder;
-	private final PathRemover remover;
 	private final IOExceptedConsumer<Path> onAddFile, onAddDirectory, onRemoveFile, onRemoveDirectory;
 	private final IOExceptedConsumer<WatchKey> onChange;
-	private boolean closed, changed;
+	private final ReadWriteLock closeLock;
+	private boolean closed;
 	private Set<Path> pathSet = null;
 	
 	/**
@@ -89,14 +94,11 @@ public class FileManager implements Closeable {
 	 *             if an I/O error occurs while initializing the {@link WatchService}
 	 */
 	public FileManager(IOExceptedConsumer<Path> onAddFile, IOExceptedConsumer<Path> onAddDirectory, IOExceptedConsumer<Path> onRemoveFile, IOExceptedConsumer<Path> onRemoveDirectory,
-			IOExceptedConsumer<WatchKey> onChange, FileSystem fs)
-					throws IOException {
-		paths = new LinkedHashMap<>();
+			IOExceptedConsumer<WatchKey> onChange, FileSystem fs) throws IOException {
+		closeLock = new ReentrantReadWriteLock();
+		paths = Collections.synchronizedMap(new LinkedHashMap<>());
 		watcher = new SimpleWatcher(this::onChange, fs.newWatchService());
-		adder = new PathAdder();
-		remover = new PathRemover();
 		closed = false;
-		changed = false;
 		this.onAddFile = onAddFile;
 		this.onAddDirectory = onAddDirectory;
 		this.onChange = onChange;
@@ -115,18 +117,22 @@ public class FileManager implements Closeable {
 	 * @throws IOException
 	 *             if an I/O error occurs while adding the {@link Path}
 	 */
-	public synchronized boolean add(Path path) throws IOException {
-		if (closed)
-			throw new ClosedFileManagerException();
-		if (paths.containsKey(path))
-			return false;
-		if (!Files.isDirectory(path))
-			register(path);
-		else
+	public boolean add(Path path) throws IOException {
+		try {
+			closeLock.readLock().lock();
+			if (closed)
+				throw new ClosedFileManagerException();
+			if (paths.containsKey(path))
+				return false;
+			if (!Files.isDirectory(path))
+				return register(path);
+			PathAdder adder = new PathAdder();
 			Files.walkFileTree(path, adder);
-		boolean didchange = changed;
-		changed = false;
-		return didchange;
+			return adder.madeChange();
+		}
+		finally {
+			closeLock.readLock().unlock();
+		}
 	}
 	
 	/**
@@ -208,77 +214,103 @@ public class FileManager implements Closeable {
 	 * @throws IOException
 	 *             if an I/O error occurs while removing the {@link Path}
 	 */
-	public synchronized boolean remove(Path path) throws IOException {
-		if (closed)
-			throw new ClosedFileManagerException();
-		if (!paths.containsKey(path))
-			return false;
-		Files.walkFileTree(path, remover);
-		boolean didchange = changed;
-		changed = false;
-		return didchange;
+	public boolean remove(Path path) throws IOException {
+		try {
+			closeLock.readLock().lock();
+			if (closed)
+				throw new ClosedFileManagerException();
+			if (!paths.containsKey(path))
+				return false;
+			if (!Files.isDirectory(path))
+				return deregister(path);
+			PathRemover remover = new PathRemover();
+			Files.walkFileTree(path, remover);
+			return remover.madeChange();
+		}
+		finally {
+			closeLock.readLock().unlock();
+		}
 	}
 	
 	/**
 	 * @return the {@link Path Paths} managed by this {@link FileManager}
 	 */
 	public Set<Path> getPaths() {
-		if (closed)
-			throw new ClosedFileManagerException();
-		if (pathSet == null)
-			pathSet = Collections.unmodifiableSet(paths.keySet());
-		return pathSet;
+		try {
+			closeLock.readLock().lock();
+			if (closed)
+				throw new ClosedFileManagerException();
+			if (pathSet == null)
+				pathSet = Collections.unmodifiableSet(paths.keySet());
+			return pathSet;
+		}
+		finally {
+			closeLock.readLock().unlock();
+		}
 	}
 	
-	private void register(Path path) throws IOException {
+	private boolean register(Path path) throws IOException {
 		if (closed)
 			throw new ClosedFileManagerException();
-		paths.put(path, path.register(watcher, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY));
-		changed = true;
+		return path != paths.put(path, path.register(((SimpleWatcher) watcher).core, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY));
 	}
 	
-	private void deregister(Path path) {
+	private boolean deregister(Path path) {
 		if (closed)
 			throw new ClosedFileManagerException();
-		paths.remove(path).cancel();
-		changed = true;
+		WatchKey removed = paths.remove(path);
+		if (removed == null)
+			return false;
+		removed.cancel();
+		return true;
 	}
 	
 	private class PathAdder extends SimpleFileVisitor<Path> {
+		private boolean changed = false;
 		
 		@Override
 		public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
 			if (paths.containsKey(dir))
 				return FileVisitResult.SKIP_SUBTREE;
-			register(dir);
+			if (register(dir))
+				changed = true;
 			onAddDirectory(dir);
 			return FileVisitResult.CONTINUE;
 		}
 		
 		@Override
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-			if (paths.containsKey(file))
-				deregister(file);
+			if (paths.containsKey(file)) {
+				if (deregister(file)) //deregister because files within directories are watched if those directories are watched
+					changed = true;
+			}
 			else
 				onAddFile(file);
 			return FileVisitResult.CONTINUE;
 		}
+		
+		public boolean madeChange() {
+			return changed;
+		}
 	}
 	
 	private class PathRemover extends SimpleFileVisitor<Path> {
+		private boolean changed = false;
 		
 		@Override
 		public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
 			if (!paths.containsKey(dir))
 				return FileVisitResult.SKIP_SUBTREE;
-			deregister(dir);
+			if (deregister(dir))
+				changed = true;
 			return FileVisitResult.CONTINUE;
 		}
 		
 		@Override
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 			if (paths.containsKey(file)) {
-				deregister(file);
+				if (deregister(file))
+					changed = true;
 				onRemoveFile(file);
 			}
 			return FileVisitResult.CONTINUE;
@@ -289,36 +321,62 @@ public class FileManager implements Closeable {
 			onRemoveDirectory(dir);
 			return FileVisitResult.CONTINUE;
 		}
+		
+		public boolean madeChange() {
+			return changed;
+		}
 	}
 	
 	@Override
-	public synchronized void close() throws IOException {
-		if (closed)
-			return;
-		closed = true;
-		IOException except = null;
-		for (Iterator<Map.Entry<Path, WatchKey>> iter = paths.entrySet().iterator(); iter.hasNext();) {
-			Map.Entry<Path, WatchKey> removed = iter.next();
-			Path p = removed.getKey();
-			try {
-				if (Files.isDirectory(p))
-					onRemoveDirectory(p);
-				else
-					onRemoveFile(p);
+	public void close() throws IOException {
+		try {
+			closeLock.writeLock().lock();
+			if (closed)
+				return;
+			closed = true;
+			IOException except = null;
+			for (Iterator<Map.Entry<Path, WatchKey>> iter = paths.entrySet().iterator(); iter.hasNext();) {
+				Map.Entry<Path, WatchKey> removed = iter.next();
+				Path p = removed.getKey();
+				try {
+					if (Files.isDirectory(p))
+						onRemoveDirectory(p);
+					else
+						onRemoveFile(p);
+				}
+				catch (IOException e) {
+					e.printStackTrace();
+					if (except == null)
+						except = e;
+				}
+				removed.getValue().cancel();
+				try {
+					iter.remove();
+				}
+				catch (UnsupportedOperationException e) {}
 			}
-			catch (IOException e) {
-				e.printStackTrace();
-				if (except == null)
-					except = e;
-			}
-			removed.getValue().cancel();
-			try {
-				iter.remove();
-			}
-			catch (UnsupportedOperationException e) {}
+			watcher.close();
+			if (except != null)
+				throw except;
 		}
-		watcher.close();
-		if (except != null)
-			throw except;
+		finally {
+			closeLock.writeLock().unlock();
+		}
+	}
+	
+	public static void main(String[] args) throws IOException {
+		FileManager fm = new FileManager(p -> {}, p -> {}, k -> {
+			List<WatchEvent<?>> events = k.pollEvents();
+			k.reset();
+			for (WatchEvent<?> event : events)
+				System.out.println(event.kind().toString() + ": " + event.context().toString());
+		});
+		long time = System.nanoTime();
+		fm.add(Paths.get("/Users/joshualipstone/Downloads/"));
+		fm.add(Paths.get("/Users/joshualipstone/Downloads/Compressed/"));
+		System.out.println((System.nanoTime() - time) / 1000000);
+		Scanner delay = new Scanner(System.in);
+		delay.nextLine();
+		fm.close();
 	}
 }

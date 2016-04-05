@@ -15,7 +15,7 @@ import toberumono.utils.functions.IOExceptedConsumer;
  * @author Toberumono
  */
 public class SimpleWatcher implements WatchService {
-	private final WatchService core;
+	public final WatchService core;
 	private final Thread watcher;
 	private boolean closed;
 	
@@ -24,8 +24,8 @@ public class SimpleWatcher implements WatchService {
 	 * handle events.
 	 * 
 	 * @param action
-	 *            a {@link IOExceptedConsumer} that handles {@link WatchKey WatchKeys} that have been signaled. This <i>must</i>
-	 *            re-validate the key.
+	 *            a {@link IOExceptedConsumer} that handles {@link WatchKey WatchKeys} that have been signaled. This
+	 *            <i>must</i> {@link WatchKey#reset() reset} the key.
 	 * @param service
 	 *            the {@link WatchService} to wrap
 	 */
@@ -85,5 +85,4 @@ public class SimpleWatcher implements WatchService {
 	public WatchKey take() throws InterruptedException {
 		return core.take();
 	}
-	
 }
