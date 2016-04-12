@@ -1,12 +1,12 @@
 package toberumono.utils.files.manager;
 
+import java.io.IOException;
 import java.nio.file.FileVisitor;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Stack;
-import java.util.function.BiConsumer;
+
+import toberumono.utils.functions.IOExceptedBiConsumer;
 
 /**
  * An abstract extension of {@link FileVisitor} that implements the basic functions to keep track of changes made while
@@ -19,15 +19,15 @@ import java.util.function.BiConsumer;
  *            the type to use to store the state for each {@link Path}
  */
 public abstract class PathUpdater<T extends Path, S> extends SimpleFileVisitor<T> {
-	private final Stack<T> updated;
-	private final Map<T, S> states;
+	private final Stack<T> items;
+	private final Stack<S> states;
 	
 	/**
 	 * Constructs a new {@link PathUpdater}
 	 */
 	public PathUpdater() {
-		updated = new Stack<>();
-		states = new HashMap<>();
+		items = new Stack<>();
+		states = new Stack<>();
 	}
 	
 	/**
@@ -38,10 +38,9 @@ public abstract class PathUpdater<T extends Path, S> extends SimpleFileVisitor<T
 	 * @param state
 	 *            the new value of the {@link Path Path's} state
 	 */
-	protected void setState(T path, S state) {
-		if (!states.containsKey(path))
-			updated.push(path);
-		states.put(path, state);
+	protected void updateState(T path, S state) {
+		items.push(path);
+		states.push(state);
 	}
 	
 	/**
@@ -50,11 +49,14 @@ public abstract class PathUpdater<T extends Path, S> extends SimpleFileVisitor<T
 	 * 
 	 * @param action
 	 *            the action to take on each item that was visited by the {@link PathUpdater}
+	 * @throws IOException
+	 *             if an I/O error occurs during the rewind
 	 */
-	protected void rewind(BiConsumer<T, S> action) {
-		if (updated.size() == 0)
+	protected void rewind(IOExceptedBiConsumer<T, S> action) throws IOException {
+		if (items.size() == 0)
 			return;
-		for (T item = updated.pop(); updated.size() > 0; item = updated.pop())
-			action.accept(item, states.remove(item));
+		T item = items.pop();
+		for (S state = states.pop(); items.size() > 0; item = items.pop(), state = states.pop())
+			action.accept(item, state);
 	}
 }

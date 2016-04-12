@@ -225,13 +225,32 @@ public abstract class AbstractFileManager implements FileManager {
 			if (!Files.isDirectory(path))
 				throw new NotDirectoryException(path.toString());
 			markActive(path);
-			if (!paths.containsKey(path))
-				Files.walkFileTree(path, FOLLOW_LINKS_SET, Integer.MAX_VALUE, new PathAdder());
+			if (!paths.containsKey(path)) {
+				PathAdder pa = new PathAdder();
+				try {
+					Files.walkFileTree(path, FOLLOW_LINKS_SET, Integer.MAX_VALUE, pa);
+				}
+				catch (IOException e) {
+					pa.rewind(this::rewindAdd);
+					throw e;
+				}
+			}
 		}
 		finally {
 			markInactive(path);
 			closeLock.readLock().unlock();
 		}
+	}
+	
+	protected void rewindAdd(Path p, Integer state) throws IOException {
+		if (state == 2) {
+			if (Files.isDirectory(p))
+				onRemoveDirectory(p);
+			else
+				onRemoveFile(p);
+		}
+		else if (state == 1)
+			deregister(p);
 	}
 	
 	@Override
@@ -243,8 +262,16 @@ public abstract class AbstractFileManager implements FileManager {
 			if (!Files.isDirectory(path))
 				throw new NotDirectoryException(path.toString());
 			markActive(path);
-			if (paths.containsKey(path))
-				Files.walkFileTree(path, FOLLOW_LINKS_SET, Integer.MAX_VALUE, new PathRemover());
+			if (paths.containsKey(path)) {
+				PathRemover pr = new PathRemover();
+				try {
+					Files.walkFileTree(path, FOLLOW_LINKS_SET, Integer.MAX_VALUE, pr);
+				}
+				catch (IOException e) {
+					pr.rewind(this::rewindRemove);
+					throw e;
+				}
+			}
 		}
 		finally {
 			markInactive(path);
@@ -252,11 +279,22 @@ public abstract class AbstractFileManager implements FileManager {
 		}
 	}
 	
+	protected void rewindRemove(Path p, Integer state) throws IOException {
+		if (state == 2) {
+			if (Files.isDirectory(p))
+				onAddDirectory(p);
+			else
+				onAddFile(p);
+		}
+		else if (state == 1)
+			register(p);
+	}
+	
 	/**
 	 * Overrides of this method should implement the actions to take when a file is added to the {@link FileManager} or
 	 * created in a directory that the {@link FileManager} is watching.<br>
-	 * <b>Note:</b> If this method is called from outside of the {@link FileManager FileManager's} internal {@link #add(Path) addition},
-	 * {@link #remove(Path) removal}, or update logic, the result is undefined.
+	 * <b>Note:</b> If this method is called from outside of the {@link FileManager FileManager's} internal {@link #add(Path)
+	 * addition}, {@link #remove(Path) removal}, or update logic, the result is undefined.
 	 * 
 	 * @param path
 	 *            the {@link Path} to the file being added
@@ -374,7 +412,7 @@ public abstract class AbstractFileManager implements FileManager {
 			if (paths.containsKey(dir))
 				return FileVisitResult.SKIP_SUBTREE;
 			register(dir);
-			setState(dir, 1);
+			updateState(dir, 1);
 			return FileVisitResult.CONTINUE;
 		}
 		
@@ -382,24 +420,19 @@ public abstract class AbstractFileManager implements FileManager {
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 			if (!paths.containsKey(file)) {
 				register(file);
-				setState(file, 1);
+				updateState(file, 1);
 				onAddFile(file);
-				setState(file, 2);
+				updateState(file, 2);
 			}
 			return FileVisitResult.CONTINUE;
 		}
 		
 		@Override
 		public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-			if (exc != null) //TODO should fix this up so that additions are atomic (probably through some sort of rollback mechanism?)
-				handleException(null, exc);
-			try {
-				onAddDirectory(dir);
-				setState(dir, 2);
-			}
-			catch (IOException e) {
-				handleException(dir, e);
-			}
+			if (exc != null)
+				throw exc;
+			onAddDirectory(dir);
+			updateState(dir, 2);
 			return FileVisitResult.CONTINUE;
 		}
 	}
@@ -411,7 +444,7 @@ public abstract class AbstractFileManager implements FileManager {
 			if (!paths.containsKey(dir))
 				return FileVisitResult.SKIP_SUBTREE;
 			deregister(dir);
-			setState(dir, 1);
+			updateState(dir, 1);
 			return FileVisitResult.CONTINUE;
 		}
 		
@@ -419,9 +452,9 @@ public abstract class AbstractFileManager implements FileManager {
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 			if (paths.containsKey(file)) {
 				deregister(file);
-				setState(file, 1);
+				updateState(file, 1);
 				onRemoveFile(file);
-				setState(file, 2);
+				updateState(file, 2);
 			}
 			return FileVisitResult.CONTINUE;
 		}
@@ -429,14 +462,9 @@ public abstract class AbstractFileManager implements FileManager {
 		@Override
 		public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
 			if (exc != null)
-				handleException(null, exc);
-			try {
-				onRemoveDirectory(dir);
-				setState(dir, 2);
-			}
-			catch (IOException e) {
-				handleException(dir, e);
-			}
+				throw exc;
+			onRemoveDirectory(dir);
+			updateState(dir, 2);
 			return FileVisitResult.CONTINUE;
 		}
 	}
@@ -525,8 +553,12 @@ public abstract class AbstractFileManager implements FileManager {
 				else
 					onAddFile(path);
 			}
-			else if (kind == StandardWatchEventKinds.ENTRY_MODIFY)
-				onChangeFile(path);
+			else if (kind == StandardWatchEventKinds.ENTRY_MODIFY) {
+				if (Files.isDirectory(path))
+					onChangeDirectory(path);
+				else
+					onChangeFile(path);
+			}
 			else if (kind == StandardWatchEventKinds.ENTRY_DELETE) {
 				deregister(path);
 				if (Files.isDirectory(path))
