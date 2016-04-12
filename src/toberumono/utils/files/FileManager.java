@@ -4,6 +4,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
+import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,7 +14,9 @@ import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,11 +36,14 @@ import static java.nio.file.StandardWatchEventKinds.*;
  * @author Toberumono
  */
 public class FileManager implements Closeable {
+	private static final HashSet<FileVisitOption> FOLLOW_LINKS_SET = new HashSet<>(Arrays.asList(new FileVisitOption[]{FileVisitOption.FOLLOW_LINKS}));
+	
 	private final WatchService watcher;
 	private final Map<Path, WatchKey> paths;
 	private final IOExceptedConsumer<Path> onAddFile, onAddDirectory, onRemoveFile, onRemoveDirectory;
 	private final IOExceptedConsumer<WatchKey> onChange;
 	private final ReadWriteLock closeLock;
+	private final int maxDepth;
 	private boolean closed;
 	private Set<Path> pathSet = null;
 	
@@ -104,6 +110,7 @@ public class FileManager implements Closeable {
 		this.onChange = onChange;
 		this.onRemoveFile = onRemoveFile;
 		this.onRemoveDirectory = onRemoveDirectory;
+		this.maxDepth = Integer.MAX_VALUE;
 	}
 	
 	/**
@@ -127,7 +134,7 @@ public class FileManager implements Closeable {
 			if (!Files.isDirectory(path))
 				return register(path);
 			PathAdder adder = new PathAdder();
-			Files.walkFileTree(path, adder);
+			Files.walkFileTree(path, FOLLOW_LINKS_SET, maxDepth, adder);
 			return adder.madeChange();
 		}
 		finally {
@@ -224,7 +231,7 @@ public class FileManager implements Closeable {
 			if (!Files.isDirectory(path))
 				return deregister(path);
 			PathRemover remover = new PathRemover();
-			Files.walkFileTree(path, remover);
+			Files.walkFileTree(path, FOLLOW_LINKS_SET, maxDepth, remover);
 			return remover.madeChange();
 		}
 		finally {
@@ -280,6 +287,8 @@ public class FileManager implements Closeable {
 		
 		@Override
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+			if (Files.isDirectory(file))
+				System.out.println(file);
 			if (paths.containsKey(file)) {
 				if (deregister(file)) //deregister because files within directories are watched if those directories are watched
 					changed = true;
@@ -378,5 +387,6 @@ public class FileManager implements Closeable {
 		Scanner delay = new Scanner(System.in);
 		delay.nextLine();
 		fm.close();
+		delay.close();
 	}
 }

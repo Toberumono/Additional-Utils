@@ -188,7 +188,7 @@ public final class NativeLibraryManager {
 			if (security != null) //No need to test the link permission - that will be implicitly tested by System.loadLibrary
 				security.checkPermission(new NativeLibraryPermission("libraries.load"));
 			try {
-				if (name.indexOf((int) File.separatorChar) != -1)
+				if (name.indexOf(File.separatorChar) != -1)
 					System.load(name);
 				else
 					System.loadLibrary(name);
