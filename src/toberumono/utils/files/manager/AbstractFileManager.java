@@ -185,8 +185,15 @@ public abstract class AbstractFileManager implements FileManager {
 		errorHandler.start();
 	}
 	
+	/**
+	 * Flags a {@link Path} as being processed by either a call to {@link #add(Path)} or {@link #remove(Path)}. This is used
+	 * to allow multiple operations to run simultaneously provided that they do not contain the same {@link Path}.
+	 * 
+	 * @param path
+	 *            the {@link Path} to mark as active
+	 */
 	protected final void markActive(Path path) {
-		for (;;) {
+		markActiveLoop: for (;;) {
 			synchronized (activePaths) {
 				for (Path active : activePaths) {
 					if (path.startsWith(active) || path.endsWith(active)) {
@@ -198,12 +205,11 @@ public abstract class AbstractFileManager implements FileManager {
 								e.printStackTrace();
 							}
 						}
-					}
-					else {
-						activePaths.add(path);
-						return;
+						continue markActiveLoop;
 					}
 				}
+				activePaths.add(path);
+				return;
 			}
 		}
 	}
@@ -219,7 +225,8 @@ public abstract class AbstractFileManager implements FileManager {
 	
 	/**
 	 * {@inheritDoc}<br>
-	 * If an error occurs during the operation, all changes made will be reverted to before the operation started via a rollback procedure.
+	 * If an error occurs during the operation, all changes made will be reverted to before the operation started via a
+	 * rollback procedure.
 	 */
 	@Override
 	public void add(Path path) throws IOException {
@@ -257,10 +264,11 @@ public abstract class AbstractFileManager implements FileManager {
 		else if (state == 1)
 			deregister(p);
 	}
-
+	
 	/**
 	 * {@inheritDoc}<br>
-	 * If an error occurs during the operation, all changes made will be reverted to before the operation started via a rollback procedure.
+	 * If an error occurs during the operation, all changes made will be reverted to before the operation started via a
+	 * rollback procedure.
 	 */
 	@Override
 	public void remove(Path path) throws IOException {
