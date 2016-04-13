@@ -143,6 +143,27 @@ public abstract class AbstractFileManager implements FileManager {
 	 *            a {@link Predicate} that returns {@code true} iff the {@link AbstractFileManager} should process
 	 *            {@link WatchEvent WatchEvents} with the given {@link Path} as their {@link WatchEvent#context() context}
 	 *            (this applies to both files and directories)
+	 * @throws IOException
+	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
+	 */
+	public AbstractFileManager(FileSystem fileSystem, int maxThreads, Predicate<Path> filter) throws IOException {
+		this(fileSystem, maxThreads, filter, DEFAULT_KINDS_COMPARATOR);
+	}
+	
+	/**
+	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem}, with the given maximum processing
+	 * {@link Thread} count, and the given {@link WatchEvent} {@link Comparator} to use when prioritizing {@link WatchEvent
+	 * WatchEvents} for processing.
+	 * 
+	 * @param fileSystem
+	 *            the {@link FileSystem} on which the {@link AbstractFileManager} will manage files
+	 * @param maxThreads
+	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use.
+	 *            <i>Must be at least 1</i>
+	 * @param filter
+	 *            a {@link Predicate} that returns {@code true} iff the {@link AbstractFileManager} should process
+	 *            {@link WatchEvent WatchEvents} with the given {@link Path} as their {@link WatchEvent#context() context}
+	 *            (this applies to both files and directories)
 	 * @param watchEventKindsComparator
 	 *            the {@link Comparator} to use when prioritizing {@link WatchEvent WatchEvents}
 	 * @throws IOException
