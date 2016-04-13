@@ -35,8 +35,6 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
 
-import toberumono.utils.files.ClosedFileManagerException;
-
 import static java.nio.file.StandardWatchEventKinds.*;
 
 /**
