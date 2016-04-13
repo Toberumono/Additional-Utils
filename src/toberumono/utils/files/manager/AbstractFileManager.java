@@ -33,7 +33,7 @@ import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Function;
+import java.util.function.Predicate;
 
 import toberumono.utils.files.ClosedFileManagerException;
 
@@ -45,20 +45,31 @@ import static java.nio.file.StandardWatchEventKinds.*;
  * @author Toberumono
  */
 public abstract class AbstractFileManager implements FileManager {
-	private static final Comparator<WatchEvent<?>> DEFAULT_KINDS_COMPARATOR = (a, b) -> {
+	/**
+	 * A {@link Comparator} for {@link StandardWatchEventKinds} that prioritizes the kinds from greatest to least as follows:
+	 * <ol>
+	 * <li>{@link StandardWatchEventKinds#ENTRY_CREATE ENTRY_CREATE}</li>
+	 * <li>{@link StandardWatchEventKinds#ENTRY_MODIFY ENTRY_MODIFY}</li>
+	 * <li>{@link StandardWatchEventKinds#ENTRY_DELETE ENTRY_DELETE}</li>
+	 * </ol>
+	 */
+	public static final Comparator<WatchEvent<?>> DEFAULT_KINDS_COMPARATOR = (a, b) -> {
 		if (a.kind().equals(b.kind())) //We only need to check this once
 			return 0;
 		if (a.kind().equals(StandardWatchEventKinds.ENTRY_CREATE)) //ENTRY_CREATE has first priority, and we know that a.kind() != b.kind(), so a > b
 			return 1;
 		if (a.kind().equals(StandardWatchEventKinds.ENTRY_MODIFY)) //ENTRY_MODIFY has second priority (after ENTRY_CREATE, but before ENTRY_DELETE)
-			if (b.kind().equals(StandardWatchEventKinds.ENTRY_CREATE)) //ENTRY_CREATE has higher priority than ENTRY_MODIFY, so b > a
-				return -1;
-			else if (b.kind().equals(StandardWatchEventKinds.ENTRY_DELETE)) //ENTRY_DELETE has lower priority than ENTRY_MODIFY, so a > b
-				return 1;
+			return b.kind().equals(StandardWatchEventKinds.ENTRY_CREATE) ? -1 : 1; //ENTRY_CREATE has higher priority than ENTRY_MODIFY, so b > a
 		if (a.kind().equals(StandardWatchEventKinds.ENTRY_DELETE)) //ENTRY_DELETE has last priority, and we know that a.kind() != b.kind(), so b > a
 			return -1;
 		return 0;
 	};
+	
+	/**
+	 * A {@link Predicate} that returns {@code true} for all {@link Path Paths} whose {@link Path#getFileName() file name}
+	 * components do <i>not</i> start with a '.'
+	 */
+	public static final Predicate<Path> DEFAULT_FILTER = p -> !p.getFileName().toString().startsWith(".");
 	private static final long watchLoopTimeout = 500;
 	private static final TimeUnit watchLoopTimeoutUnit = TimeUnit.MILLISECONDS;
 	
@@ -74,6 +85,7 @@ public abstract class AbstractFileManager implements FileManager {
 	private final Set<Path> activePaths;
 	private transient Set<Path> unmodifiablePaths;
 	private final ThreadGroup threadGroup;
+	private final Predicate<Path> filter;
 	private boolean closed;
 	
 	/**
@@ -102,8 +114,8 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	/**
-	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem} and with the given maximum processing
-	 * {@link Thread} count.
+	 * Constructs an {@link AbstractFileManager} that ignores hidden files (those with names starting with a '.') on the
+	 * given {@link FileSystem} and with the given maximum processing {@link Thread} count.
 	 * 
 	 * @param fileSystem
 	 *            the {@link FileSystem} on which the {@link AbstractFileManager} will manage files
@@ -114,7 +126,7 @@ public abstract class AbstractFileManager implements FileManager {
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
 	public AbstractFileManager(FileSystem fileSystem, int maxThreads) throws IOException {
-		this(fileSystem, maxThreads, DEFAULT_KINDS_COMPARATOR);
+		this(fileSystem, maxThreads, DEFAULT_FILTER, DEFAULT_KINDS_COMPARATOR);
 	}
 	
 	/**
@@ -127,14 +139,19 @@ public abstract class AbstractFileManager implements FileManager {
 	 * @param maxThreads
 	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use.
 	 *            <i>Must be at least 1</i>
+	 * @param filter
+	 *            a {@link Predicate} that returns {@code true} iff the {@link AbstractFileManager} should process
+	 *            {@link WatchEvent WatchEvents} with the given {@link Path} as their {@link WatchEvent#context() context}
+	 *            (this applies to both files and directories)
 	 * @param watchEventKindsComparator
 	 *            the {@link Comparator} to use when prioritizing {@link WatchEvent WatchEvents}
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
-	public AbstractFileManager(FileSystem fileSystem, int maxThreads, Comparator<WatchEvent<?>> watchEventKindsComparator) throws IOException {
+	public AbstractFileManager(FileSystem fileSystem, int maxThreads, Predicate<Path> filter, Comparator<WatchEvent<?>> watchEventKindsComparator) throws IOException {
 		paths = Collections.synchronizedMap(new LinkedHashMap<>());
-		closeLock = new ReentrantReadWriteLock();
+		this.filter = filter;
+		closeLock = new ReentrantReadWriteLock(true); //Ensures that this can be closed
 		activePaths = new HashSet<>();
 		watchService = fileSystem.newWatchService();
 		watchQueue = new PriorityBlockingQueue<>(4, watchEventKindsComparator);
@@ -149,47 +166,10 @@ public abstract class AbstractFileManager implements FileManager {
 		errorHandler.start();
 	}
 	
-	/**
-	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem}, with a maximum processing {@link Thread}
-	 * count equal to one half of the available processors (retrieved by calling {@link Runtime#availableProcessors()}), the
-	 * given {@link WatchEvent} {@link Comparator} to use when prioritizing {@link WatchEvent WatchEvents} for processing,
-	 * and a {@link WatchEventProcessor} generated by the given constructor {@link Function}.
-	 * 
-	 * @param fileSystem
-	 *            the {@link FileSystem} on which the {@link AbstractFileManager} will manage files
-	 * @param maxThreads
-	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use.
-	 *            <i>Must be at least 1</i>
-	 * @param watchEventKindsComparator
-	 *            the {@link Comparator} to use when prioritizing {@link WatchEvent WatchEvents}
-	 * @param watchEventProcessorConstructor
-	 *            the constructor to use when constructing the {@link WatchEventProcessor}, as a {@link Function} that takes
-	 *            a {@link ThreadGroup} as its argument
-	 * @throws IOException
-	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
-	 */
-	public AbstractFileManager(FileSystem fileSystem, int maxThreads, Comparator<WatchEvent<?>> watchEventKindsComparator,
-			Function<ThreadGroup, WatchEventProcessor> watchEventProcessorConstructor) throws IOException {
-		paths = Collections.synchronizedMap(new LinkedHashMap<>());
-		closeLock = new ReentrantReadWriteLock();
-		activePaths = new HashSet<>();
-		watchService = fileSystem.newWatchService();
-		watchQueue = new PriorityBlockingQueue<>(4, watchEventKindsComparator);
-		futuresQueue = new LinkedBlockingQueue<>();
-		pool = Executors.newWorkStealingPool(maxThreads);
-		(threadGroup = new ThreadGroup(getClass().getName() + "#threadGroup")).setDaemon(true); //TODO might want to use this to handle uncaught exceptions
-		(watchKeyProcessor = new WatchKeyProcessor(threadGroup)).setDaemon(true);
-		(watchEventProcessor = watchEventProcessorConstructor.apply(threadGroup)).setDaemon(true);
-		(errorHandler = new ErrorHandler(threadGroup)).setDaemon(true);
-		watchKeyProcessor.start();
-		watchEventProcessor.start();
-		errorHandler.start();
-	}
-	
 	protected final void markActive(Path path) {
-		testLoop: for (;;) {
+		for (;;) {
 			synchronized (activePaths) {
-				for (Path active : activePaths)
+				for (Path active : activePaths) {
 					if (path.startsWith(active) || path.endsWith(active)) {
 						synchronized (active) {
 							try {
@@ -199,10 +179,12 @@ public abstract class AbstractFileManager implements FileManager {
 								e.printStackTrace();
 							}
 						}
-						continue testLoop;
 					}
-				activePaths.add(path);
-				return;
+					else {
+						activePaths.add(path);
+						return;
+					}
+				}
 			}
 		}
 	}
@@ -216,6 +198,10 @@ public abstract class AbstractFileManager implements FileManager {
 		}
 	}
 	
+	/**
+	 * {@inheritDoc}<br>
+	 * If an error occurs during the operation, all changes made will be reverted to before the operation started via a rollback procedure.
+	 */
 	@Override
 	public void add(Path path) throws IOException {
 		try {
@@ -252,7 +238,11 @@ public abstract class AbstractFileManager implements FileManager {
 		else if (state == 1)
 			deregister(p);
 	}
-	
+
+	/**
+	 * {@inheritDoc}<br>
+	 * If an error occurs during the operation, all changes made will be reverted to before the operation started via a rollback procedure.
+	 */
 	@Override
 	public void remove(Path path) throws IOException {
 		try {
@@ -405,11 +395,34 @@ public abstract class AbstractFileManager implements FileManager {
 			removed.cancel();
 	}
 	
+	protected void watchEventProcessor(WatchEvent.Kind<?> kind, Path path) throws IOException {
+		if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
+			register(path);
+			if (Files.isDirectory(path))
+				onAddDirectory(path);
+			else
+				onAddFile(path);
+		}
+		else if (kind == StandardWatchEventKinds.ENTRY_MODIFY) {
+			if (Files.isDirectory(path))
+				onChangeDirectory(path);
+			else
+				onChangeFile(path);
+		}
+		else if (kind == StandardWatchEventKinds.ENTRY_DELETE) {
+			deregister(path);
+			if (Files.isDirectory(path))
+				onRemoveDirectory(path);
+			else
+				onRemoveFile(path);
+		}
+	}
+	
 	private class PathAdder extends PathUpdater<Path, Integer> {
 		
 		@Override
 		public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-			if (paths.containsKey(dir))
+			if (paths.containsKey(dir) || !filter.test(dir))
 				return FileVisitResult.SKIP_SUBTREE;
 			register(dir);
 			updateState(dir, 1);
@@ -418,7 +431,7 @@ public abstract class AbstractFileManager implements FileManager {
 		
 		@Override
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-			if (!paths.containsKey(file)) {
+			if (!paths.containsKey(file) || !filter.test(file)) {
 				register(file);
 				updateState(file, 1);
 				onAddFile(file);
@@ -477,7 +490,7 @@ public abstract class AbstractFileManager implements FileManager {
 		
 		@Override
 		public final void run() {
-			List<Future<?>> active = new ArrayList<>(); //TODO should this be a queue?
+			List<Future<?>> active = new ArrayList<>();
 			try { //Initializing future as null avoids a double-length wait on the first iteration
 				for (Future<?> future = null; !AbstractFileManager.this.closed; future = futuresQueue.poll(watchLoopTimeout, watchLoopTimeoutUnit)) {
 					if (future != null) {
@@ -530,7 +543,7 @@ public abstract class AbstractFileManager implements FileManager {
 					WatchEvent.Kind<?> kind = event.kind();
 					futuresQueue.put(pool.submit(() -> {
 						try {
-							process(kind, path);
+							watchEventProcessor(kind, path);
 							return null; //In order to throw an exception, we must return null here (Makes it Callable instead of Runnable)
 						}
 						catch (IOException e) {
@@ -542,29 +555,6 @@ public abstract class AbstractFileManager implements FileManager {
 			catch (InterruptedException e) {
 				if (!AbstractFileManager.this.closed)
 					e.printStackTrace();
-			}
-		}
-		
-		public void process(WatchEvent.Kind<?> kind, Path path) throws IOException {
-			if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
-				register(path);
-				if (Files.isDirectory(path))
-					onAddDirectory(path);
-				else
-					onAddFile(path);
-			}
-			else if (kind == StandardWatchEventKinds.ENTRY_MODIFY) {
-				if (Files.isDirectory(path))
-					onChangeDirectory(path);
-				else
-					onChangeFile(path);
-			}
-			else if (kind == StandardWatchEventKinds.ENTRY_DELETE) {
-				deregister(path);
-				if (Files.isDirectory(path))
-					onRemoveDirectory(path);
-				else
-					onRemoveFile(path);
 			}
 		}
 	}
@@ -600,14 +590,18 @@ public abstract class AbstractFileManager implements FileManager {
 		@SuppressWarnings("unchecked")
 		public final void process(WatchKey key, List<WatchEvent<?>> events) {
 			List<WatchEvent<?>> temp = new ArrayList<>(); //TODO might be faster to not create the object...
-			for (WatchEvent<?> e : events)
-				temp.add(new ReWrappedWatchEvent((WatchEvent<Path>) e, key));
+			for (WatchEvent<?> e : events) {
+				if (filter.test((Path) e.context()))
+					temp.add(new ReWrappedWatchEvent((WatchEvent<Path>) e, key));
+			}
 			watchQueue.addAll(temp);
 		}
 	}
 	
 	@Override
 	public void close() throws IOException {
+		if (closed) //If it's already closed, don't bother with the 
+			return;
 		try {
 			closeLock.writeLock().lock();
 			if (closed)

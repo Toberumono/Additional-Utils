@@ -25,7 +25,9 @@ public interface FileManager extends Closeable {
 	
 	/**
 	 * Adds the directory pointed to by the given {@link Path} and all of its subdirectories to the {@link FileManager
-	 * FileManager's} managed files.
+	 * FileManager's} managed files.<br>
+	 * If the directory specified by {@link Path path} or its contents (including those of subdirectories) are modified while
+	 * the operation is in progress and an error occurs, the result is undefined.
 	 * 
 	 * @param path
 	 *            the {@link Path} to watch. This <i>must</i> point to a directory
@@ -38,7 +40,9 @@ public interface FileManager extends Closeable {
 	
 	/**
 	 * Removes the directory pointed to by the given {@link Path} and all of its subdirectories from the {@link FileManager
-	 * FileManager's} managed files.
+	 * FileManager's} managed files.<br>
+	 * If the directory specified by {@link Path path} or its contents (including those of subdirectories) are modified while
+	 * the operation is in progress and an error occurs, the result is undefined.
 	 * 
 	 * @param path
 	 *            the {@link Path} to watch. This <i>must</i> point to a directory
