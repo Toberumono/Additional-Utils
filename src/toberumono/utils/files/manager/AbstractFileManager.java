@@ -8,6 +8,7 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
@@ -16,6 +17,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -80,7 +82,7 @@ public abstract class AbstractFileManager implements FileManager {
 	private final BlockingQueue<WatchEvent<?>> watchQueue;
 	private final BlockingQueue<Future<?>> futuresQueue;
 	private final ReadWriteLock closeLock;
-	private final Set<Path> activePaths;
+	private final Map<Path, Object> activePaths;
 	private transient Set<Path> unmodifiablePaths;
 	private final ThreadGroup threadGroup;
 	private final Predicate<Path> filter;
@@ -171,7 +173,7 @@ public abstract class AbstractFileManager implements FileManager {
 		paths = Collections.synchronizedMap(new LinkedHashMap<>());
 		this.filter = filter;
 		closeLock = new ReentrantReadWriteLock(true); //Ensures that this can be closed
-		activePaths = new HashSet<>();
+		activePaths = new HashMap<>();
 		watchService = fileSystem.newWatchService();
 		watchQueue = new PriorityBlockingQueue<>(4, watchEventKindsComparator);
 		futuresQueue = new LinkedBlockingQueue<>();
@@ -186,39 +188,92 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	/**
-	 * Flags a {@link Path} as being processed by either a call to {@link #add(Path)} or {@link #remove(Path)}. This is used
-	 * to allow multiple operations to run simultaneously provided that they do not contain the same {@link Path}.
+	 * Flags a {@link Path} as being processed by an operation in the {@link AbstractFileManager}. This is used to allow
+	 * multiple operations to run simultaneously provided that they do not contain the same {@link Path}.
 	 * 
 	 * @param path
 	 *            the {@link Path} to mark as active
 	 */
 	protected final void markActive(Path path) {
+		for (;;) {
+			synchronized (activePaths) {
+				if (activePaths.containsKey(path)) {
+					try {
+						activePaths.get(path).wait();
+					}
+					catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+				else {
+					activePaths.put(path, new Object());
+					return;
+				}
+			}
+		}
+	}
+	
+	/**
+	 * Flags a {@link Set} of {@link Path Paths} as being processed by an operation in the {@link AbstractFileManager}. This
+	 * is used to allow multiple operations to run simultaneously provided that they do not contain the same {@link Path}.
+	 * All {@link Path Paths} in the {@link Set} point to the same sync object in the {@link Map}.
+	 * 
+	 * @param paths
+	 *            the {@link Path Paths} to mark as active
+	 */
+	protected final void markActive(Set<Path> paths) {
 		markActiveLoop: for (;;) {
 			synchronized (activePaths) {
-				for (Path active : activePaths) {
-					if (path.startsWith(active) || path.endsWith(active)) {
-						synchronized (active) {
+				for (Path path : paths)
+					if (activePaths.containsKey(path)) {
+						synchronized (activePaths.get(path)) {
 							try {
-								active.wait();
+								activePaths.get(path).wait();
 							}
 							catch (InterruptedException e) {
 								e.printStackTrace();
 							}
 						}
-						continue markActiveLoop;
+						continue markActiveLoop; //Continue to the outer loop
 					}
-				}
-				activePaths.add(path);
+				//This makes it so that no matter which path another thread waits on, it will get notified at the same time
+				Object sync = new Object();
+				for (Path path : paths)
+					activePaths.put(path, sync);
 				return;
 			}
 		}
 	}
 	
+	/**
+	 * Flags a {@link Path} as no longer being processed by an operation in the {@link AbstractFileManager}. It also notifies
+	 * all operations that were waiting for that path to become available.
+	 * 
+	 * @param path
+	 *            the {@link Path} to mark as inactive
+	 */
 	protected final void markInactive(Path path) {
 		synchronized (activePaths) {
-			synchronized (path) {
-				activePaths.remove(path);
-				path.notify(); //TODO check that this works for synchronization
+			synchronized (activePaths.get(path)) {
+				activePaths.remove(path).notifyAll(); //TODO check that this works for synchronization
+			}
+		}
+	}
+	
+	/**
+	 * Flags the {@link Path Paths} in the {@link Set} as no longer being processed by an operation in the
+	 * {@link AbstractFileManager}. It also notifies all operations that were waiting for that path to become available.
+	 * 
+	 * @param paths
+	 *            the {@link Path Paths} to mark as inactive
+	 */
+	protected final void markInactive(Set<Path> paths) {
+		Object sync = null;
+		synchronized (activePaths) {
+			for (Path path : paths)
+				sync = activePaths.remove(path);
+			synchronized (sync) {
+				sync.notifyAll();
 			}
 		}
 	}
@@ -230,14 +285,15 @@ public abstract class AbstractFileManager implements FileManager {
 	 */
 	@Override
 	public void add(Path path) throws IOException {
+		Set<Path> resources = null;
 		try {
 			closeLock.readLock().lock();
 			if (closed)
 				throw new ClosedFileManagerException();
 			if (!Files.isDirectory(path))
 				throw new NotDirectoryException(path.toString());
-			markActive(path);
 			if (!paths.containsKey(path)) {
+				markActive(resources = analyzeTree(path)); //Just to ensure that once assigned a value, resources are immediately marked as active
 				PathAdder pa = new PathAdder();
 				try {
 					Files.walkFileTree(path, FOLLOW_LINKS_SET, Integer.MAX_VALUE, pa);
@@ -249,7 +305,8 @@ public abstract class AbstractFileManager implements FileManager {
 			}
 		}
 		finally {
-			markInactive(path);
+			if (resources != null)
+				markInactive(resources);
 			closeLock.readLock().unlock();
 		}
 	}
@@ -272,14 +329,15 @@ public abstract class AbstractFileManager implements FileManager {
 	 */
 	@Override
 	public void remove(Path path) throws IOException {
+		Set<Path> resources = null;
 		try {
 			closeLock.readLock().lock();
 			if (closed)
 				throw new ClosedFileManagerException();
 			if (!Files.isDirectory(path))
 				throw new NotDirectoryException(path.toString());
-			markActive(path);
 			if (paths.containsKey(path)) {
+				markActive(resources = analyzeTree(path)); //Just to ensure that once assigned a value, resources are immediately marked as active
 				PathRemover pr = new PathRemover();
 				try {
 					Files.walkFileTree(path, FOLLOW_LINKS_SET, Integer.MAX_VALUE, pr);
@@ -291,7 +349,8 @@ public abstract class AbstractFileManager implements FileManager {
 			}
 		}
 		finally {
-			markInactive(path);
+			if (resources != null)
+				markInactive(resources);
 			closeLock.readLock().unlock();
 		}
 	}
@@ -423,25 +482,59 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	protected void watchEventProcessor(WatchEvent.Kind<?> kind, Path path) throws IOException {
-		if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
-			register(path);
-			if (Files.isDirectory(path))
-				onAddDirectory(path);
-			else
-				onAddFile(path);
+		try {
+			markActive(path);
+			if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
+				register(path);
+				if (Files.isDirectory(path))
+					onAddDirectory(path);
+				else
+					onAddFile(path);
+			}
+			else if (kind == StandardWatchEventKinds.ENTRY_MODIFY) {
+				if (Files.isDirectory(path))
+					onChangeDirectory(path);
+				else
+					onChangeFile(path);
+			}
+			else if (kind == StandardWatchEventKinds.ENTRY_DELETE) {
+				deregister(path);
+				if (Files.isDirectory(path))
+					onRemoveDirectory(path);
+				else
+					onRemoveFile(path);
+			}
 		}
-		else if (kind == StandardWatchEventKinds.ENTRY_MODIFY) {
-			if (Files.isDirectory(path))
-				onChangeDirectory(path);
-			else
-				onChangeFile(path);
+		finally {
+			markInactive(path);
 		}
-		else if (kind == StandardWatchEventKinds.ENTRY_DELETE) {
-			deregister(path);
-			if (Files.isDirectory(path))
-				onRemoveDirectory(path);
-			else
-				onRemoveFile(path);
+	}
+	
+	private Set<Path> analyzeTree(Path root) throws IOException {
+		Set<Path> paths = new HashSet<>();
+		Files.walkFileTree(root, FOLLOW_LINKS_SET, Integer.MAX_VALUE, new TreeAnalyzer(paths));
+		return paths;
+	}
+	
+	private class TreeAnalyzer extends SimpleFileVisitor<Path> { //TODO minimize the number of paths added
+		private final Set<Path> paths;
+		
+		public TreeAnalyzer(Set<Path> paths) {
+			this.paths = paths;
+		}
+		
+		@Override
+		public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+			if (paths.contains(dir))
+				return FileVisitResult.SKIP_SUBTREE;
+			paths.add(dir);
+			return FileVisitResult.CONTINUE;
+		}
+		
+		@Override
+		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+			paths.add(file);
+			return FileVisitResult.CONTINUE;
 		}
 	}
 	
