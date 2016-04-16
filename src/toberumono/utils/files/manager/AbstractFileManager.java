@@ -507,12 +507,16 @@ public abstract class AbstractFileManager implements FileManager {
 					onAddFile(path);
 			}
 			else if (kind == StandardWatchEventKinds.ENTRY_MODIFY) {
+				if (!paths.containsKey(path))
+					return;
 				if (Files.isDirectory(path))
 					onChangeDirectory(path);
 				else
 					onChangeFile(path);
 			}
 			else if (kind == StandardWatchEventKinds.ENTRY_DELETE) {
+				if (!paths.containsKey(path))
+					return;
 				deregister(path);
 				if (Files.isDirectory(path))
 					onRemoveDirectory(path);
@@ -713,7 +717,7 @@ public abstract class AbstractFileManager implements FileManager {
 	
 	@Override
 	public void close() throws IOException {
-		if (closed) //If it's already closed, don't bother with the 
+		if (closed) //If it's already closed, don't bother with the lock
 			return;
 		try {
 			closeLock.writeLock().lock();
