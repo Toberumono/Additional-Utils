@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Stack;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
@@ -195,20 +196,23 @@ public abstract class AbstractFileManager implements FileManager {
 	 *            the {@link Path} to mark as active
 	 */
 	protected final void markActive(Path path) {
-		for (;;) {
+		markActiveLoop: for (;;) {
 			synchronized (activePaths) {
-				if (activePaths.containsKey(path)) {
-					try {
-						activePaths.get(path).wait();
-					}
-					catch (InterruptedException e) {
-						e.printStackTrace();
+				for (Path active : activePaths.keySet()) {
+					if (path.startsWith(active) || active.startsWith(path)) { //If the current path is a sub-directory of an active path or an active path is a sub-directory of the current path
+						synchronized (activePaths.get(active)) {
+							try {
+								activePaths.get(active).wait();
+							}
+							catch (InterruptedException e) {
+								e.printStackTrace();
+							}
+						}
+						continue markActiveLoop;
 					}
 				}
-				else {
-					activePaths.put(path, new Object());
-					return;
-				}
+				activePaths.put(path, new Object());
+				return;
 			}
 		}
 	}
@@ -224,18 +228,21 @@ public abstract class AbstractFileManager implements FileManager {
 	protected final void markActive(Set<Path> paths) {
 		markActiveLoop: for (;;) {
 			synchronized (activePaths) {
-				for (Path path : paths)
-					if (activePaths.containsKey(path)) {
-						synchronized (activePaths.get(path)) {
-							try {
-								activePaths.get(path).wait();
+				for (Path path : paths) {
+					for (Path active : activePaths.keySet()) {
+						if (path.startsWith(active) || active.startsWith(path)) { //If the current path is a sub-directory of an active path or an active path is a sub-directory of the current path
+							synchronized (activePaths.get(active)) {
+								try {
+									activePaths.get(active).wait();
+								}
+								catch (InterruptedException e) {
+									e.printStackTrace();
+								}
 							}
-							catch (InterruptedException e) {
-								e.printStackTrace();
-							}
+							continue markActiveLoop;
 						}
-						continue markActiveLoop; //Continue to the outer loop
 					}
+				}
 				//This makes it so that no matter which path another thread waits on, it will get notified at the same time
 				Object sync = new Object();
 				for (Path path : paths)
@@ -254,8 +261,10 @@ public abstract class AbstractFileManager implements FileManager {
 	 */
 	protected final void markInactive(Path path) {
 		synchronized (activePaths) {
+			if (!activePaths.containsKey(path))
+				return;
 			synchronized (activePaths.get(path)) {
-				activePaths.remove(path).notifyAll(); //TODO check that this works for synchronization
+				activePaths.remove(path).notifyAll(); //If we get to here, we know that the object returned by remove is not null
 			}
 		}
 	}
@@ -268,13 +277,19 @@ public abstract class AbstractFileManager implements FileManager {
 	 *            the {@link Path Paths} to mark as inactive
 	 */
 	protected final void markInactive(Set<Path> paths) {
+		if (paths.size() == 0)
+			return;
 		Object sync = null;
+		Iterator<Path> iter = paths.iterator();
 		synchronized (activePaths) {
-			for (Path path : paths)
-				sync = activePaths.remove(path);
-			synchronized (sync) {
-				sync.notifyAll();
-			}
+			for (; sync == null && iter.hasNext();)
+				sync = activePaths.remove(iter.next());
+			for (; iter.hasNext();)
+				activePaths.remove(iter.next());
+			if (sync != null)
+				synchronized (sync) {
+					sync.notifyAll();
+				}
 		}
 	}
 	
@@ -512,30 +527,8 @@ public abstract class AbstractFileManager implements FileManager {
 	
 	private Set<Path> analyzeTree(Path root) throws IOException {
 		Set<Path> paths = new HashSet<>();
-		Files.walkFileTree(root, FOLLOW_LINKS_SET, Integer.MAX_VALUE, new TreeAnalyzer(paths));
+		Files.walkFileTree(root, FOLLOW_LINKS_SET, Integer.MAX_VALUE, new TreeAnalyzer(paths, root));
 		return paths;
-	}
-	
-	private class TreeAnalyzer extends SimpleFileVisitor<Path> { //TODO minimize the number of paths added
-		private final Set<Path> paths;
-		
-		public TreeAnalyzer(Set<Path> paths) {
-			this.paths = paths;
-		}
-		
-		@Override
-		public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-			if (paths.contains(dir))
-				return FileVisitResult.SKIP_SUBTREE;
-			paths.add(dir);
-			return FileVisitResult.CONTINUE;
-		}
-		
-		@Override
-		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-			paths.add(file);
-			return FileVisitResult.CONTINUE;
-		}
 	}
 	
 	private class PathAdder extends PathUpdater<Path, Integer> {
@@ -739,6 +732,42 @@ public abstract class AbstractFileManager implements FileManager {
 		catch (InterruptedException e) {
 			e.printStackTrace();
 		}
+	}
+}
+
+class TreeAnalyzer extends SimpleFileVisitor<Path> {
+	private final Set<Path> paths;
+	private final Stack<Path> route;
+	
+	public TreeAnalyzer(Set<Path> paths, Path root) {
+		this.paths = paths;
+		route = new Stack<>();
+		route.push(root);
+	}
+	
+	@Override
+	public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+		if (paths.contains(dir))
+			return FileVisitResult.SKIP_SUBTREE;
+		if (!dir.startsWith(route.peek()))
+			paths.add(dir);
+		route.push(dir);
+		return FileVisitResult.CONTINUE;
+	}
+	
+	@Override
+	public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+		if (!file.startsWith(route.peek()))
+			paths.add(file);
+		return FileVisitResult.CONTINUE;
+	}
+	
+	@Override
+	public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+		route.pop();
+		if (exc != null)
+			throw exc;
+		return FileVisitResult.CONTINUE;
 	}
 }
 
