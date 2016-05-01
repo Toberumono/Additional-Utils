@@ -169,6 +169,56 @@ public class Numbers {
 	}
 	
 	/**
+	 * Implementation of bucketRounding for {@code double} values that doesn't use explicitly enumerated buckets. This is a
+	 * convenience method for {@link #bucketRounding(double, RoundingMode, double, double) bucketRounding(value, rm, step, 0)}.<br>
+	 * <b>Note:</b> Only two bucket values are actually stored in memory, and no traversal is performed in the course of
+	 * their computation.
+	 * 
+	 * @param value
+	 *            the value to be rounded
+	 * @param rm
+	 *            the {@link RoundingMode} to be used; if {@code rm} equals {@link RoundingMode#UNNECESSARY}, {@code value}
+	 *            is returned immediately
+	 * @param step
+	 *            the distance between buckets (i.e. if {@code step} is 3, the buckets would be (..., -6, -3, 0, 3, 6, ...))
+	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode} passed to
+	 *         {@code rm}
+	 */
+	public static double bucketRounding(double value, RoundingMode rm, double step) {
+		return bucketRounding(value, rm, step, 0);
+	}
+	
+	/**
+	 * Implementation of bucketRounding for {@code double} values that doesn't use explicitly enumerated buckets.<br>
+	 * <b>Note:</b> Only two bucket values are actually stored in memory, and no traversal is performed in the course of
+	 * their computation.
+	 * 
+	 * @param value
+	 *            the value to be rounded
+	 * @param rm
+	 *            the {@link RoundingMode} to be used; if {@code rm} equals {@link RoundingMode#UNNECESSARY}, {@code value}
+	 *            is returned immediately
+	 * @param step
+	 *            the distance between buckets (i.e. if {@code step} is 3, and {@code start} is 0, the buckets would be (...,
+	 *            -6, -3, 0, 3, 6, ...))
+	 * @param start
+	 *            the offset from 0 at which to start the bucket values (i.e. if {@code step} is 3, and {@code start} is 1,
+	 *            the buckets would be (..., -5, -2, 1, 4, 7, ...))
+	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode} passed to
+	 *         {@code rm}
+	 */
+	public static double bucketRounding(double value, RoundingMode rm, double step, double start) {
+		if (rm == RoundingMode.UNNECESSARY)
+			return value;
+		int bucket = 0;
+		double i = (int) ((value - start) / step);
+		if (i * step + start == value)
+			return value;
+		double[] buckets = new double[]{i * step + start, (i + 1) * step + start};
+		return bucketRoundingInner(value, rm, buckets, bucket);
+	}
+	
+	/**
 	 * Implementation of bucketRounding for {@code double} values.<br>
 	 * <b>Note:</b> The values in {@code buckets} must be sorted in ascending order (the item at index 0 must be the
 	 * smallest)
