@@ -450,7 +450,8 @@ public abstract class AbstractFileManager implements FileManager {
 	protected abstract void onRemoveDirectory(Path path) throws IOException;
 	
 	/**
-	 * Overrides of this method should implement logic to handle any exceptions thrown within the {@code on*} functions.
+	 * Overrides of this method should implement logic to handle any exceptions thrown when detected {@link WatchEvent
+	 * WatchEvents} are processed.
 	 * 
 	 * @param path
 	 *            the {@link Path} that was being processed at the time of the exception; if the {@link Path} is not known,
@@ -502,7 +503,7 @@ public abstract class AbstractFileManager implements FileManager {
 			if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
 				register(path);
 				if (Files.isDirectory(path))
-					onAddDirectory(path);
+					onAddDirectory(path); //TODO should we call add here?
 				else
 					onAddFile(path);
 			}
@@ -519,7 +520,7 @@ public abstract class AbstractFileManager implements FileManager {
 					return;
 				deregister(path);
 				if (Files.isDirectory(path))
-					onRemoveDirectory(path);
+					onRemoveDirectory(path); //TODO should we call remove here?
 				else
 					onRemoveFile(path);
 			}
