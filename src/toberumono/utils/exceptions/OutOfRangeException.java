@@ -70,6 +70,8 @@ public class OutOfRangeException extends RuntimeException {
 	 *            the non-infinite bound of the range
 	 * @param out
 	 *            the value that was outside of the range
+	 * @param <T>
+	 *            the type of {@link Comparable} being provided
 	 */
 	public <T extends Comparable<? super T>> OutOfRangeException(T cap, T out) {
 		this(cap, out.compareTo(cap) > 0 ? LESS_THAN : GREATER_THAN, out);
