@@ -1,6 +1,7 @@
 package toberumono.utils.general;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -45,6 +46,55 @@ public class Numbers {
 	}
 	
 	/**
+	 * Implementation of bucketRounding for {@code int} values that doesn't use explicitly enumerated buckets. This is a
+	 * convenience method for {@link #bucketRounding(int, RoundingMode, int, int) bucketRounding(value, rm, step, 0)}.<br>
+	 * <b>Note:</b> Only two bucket values are actually stored in memory, and no traversal is performed in the course of
+	 * their computation.
+	 * 
+	 * @param value
+	 *            the value to be rounded
+	 * @param rm
+	 *            the {@link RoundingMode} to be used; if {@code rm} equals {@link RoundingMode#UNNECESSARY}, {@code value}
+	 *            is returned immediately
+	 * @param step
+	 *            the distance between buckets (i.e. if {@code step} is 3, the buckets would be (..., -6, -3, 0, 3, 6, ...))
+	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode} passed to
+	 *         {@code rm}
+	 */
+	public static int bucketRounding(int value, RoundingMode rm, int step) {
+		return bucketRounding(value, rm, step, 0);
+	}
+	
+	/**
+	 * Implementation of bucketRounding for {@code int} values that doesn't use explicitly enumerated buckets.<br>
+	 * <b>Note:</b> Only two bucket values are actually stored in memory, and no traversal is performed in the course of
+	 * their computation.
+	 * 
+	 * @param value
+	 *            the value to be rounded
+	 * @param rm
+	 *            the {@link RoundingMode} to be used; if {@code rm} equals {@link RoundingMode#UNNECESSARY}, {@code value}
+	 *            is returned immediately
+	 * @param step
+	 *            the distance between buckets (i.e. if {@code step} is 3, and {@code start} is 0, the buckets would be (...,
+	 *            -6, -3, 0, 3, 6, ...))
+	 * @param start
+	 *            the offset from 0 at which to start the bucket values (i.e. if {@code step} is 3, and {@code start} is 1,
+	 *            the buckets would be (..., -5, -2, 1, 4, 7, ...))
+	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode} passed to
+	 *         {@code rm}
+	 */
+	public static int bucketRounding(int value, RoundingMode rm, int step, int start) {
+		if (rm == RoundingMode.UNNECESSARY)
+			return value;
+		int bucket = 0, i = (value - start) / step;
+		if (i * step + start == value)
+			return value;
+		int[] buckets = new int[]{i * step + start, (i + 1) * step + start};
+		return bucketRoundingInner(value, rm, buckets, bucket);
+	}
+	
+	/**
 	 * Implementation of bucketRounding for {@code int} values.<br>
 	 * <b>Note:</b> The values in {@code buckets} must be sorted in ascending order (the item at index 0 must be the
 	 * smallest)
@@ -57,7 +107,8 @@ public class Numbers {
 	 * @param buckets
 	 *            the values to which {@code value} can be rounded. Rounding goes to the appropriate bucket value as
 	 *            specified by the {@link RoundingMode} passed to {@code rm}
-	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode}
+	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode} passed to
+	 *         {@code rm}
 	 * @throws OutOfRangeException
 	 *             if there is not a valid bucket value to which {@code value} can be rounded according to the
 	 *             {@link RoundingMode} passed to {@code rm}
@@ -68,6 +119,10 @@ public class Numbers {
 		int bucket = SupportFunctions.findBucket(value, buckets); //bucket cannot be less than 1
 		if (value == buckets[bucket]) //Fast return if value was equal to one of the bucket values
 			return buckets[bucket]; //For pointer consistency
+		return bucketRoundingInner(value, rm, buckets, bucket);
+	}
+	
+	private static int bucketRoundingInner(int value, RoundingMode rm, int[] buckets, int bucket) {
 		switch (rm) {
 			case CEILING:
 				if (bucket == buckets.length) //value is greater than the largest bucket 
@@ -126,7 +181,8 @@ public class Numbers {
 	 * @param buckets
 	 *            the values to which {@code value} can be rounded. Rounding goes to the appropriate bucket value as
 	 *            specified by the {@link RoundingMode} passed to {@code rm}
-	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode}
+	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode} passed to
+	 *         {@code rm}
 	 * @throws OutOfRangeException
 	 *             if there is not a valid bucket value to which {@code value} can be rounded according to the
 	 *             {@link RoundingMode} passed to {@code rm}
@@ -137,6 +193,10 @@ public class Numbers {
 		int bucket = SupportFunctions.findBucket(value, buckets); //bucket cannot be less than 1
 		if (value == buckets[bucket]) //Fast return if value was equal to one of the bucket values
 			return buckets[bucket]; //For pointer consistency
+		return bucketRoundingInner(value, rm, buckets, bucket);
+	}
+	
+	private static double bucketRoundingInner(double value, RoundingMode rm, double[] buckets, int bucket) {
 		switch (rm) {
 			case CEILING:
 				if (bucket == buckets.length) //value is greater than the largest bucket 
@@ -198,13 +258,40 @@ public class Numbers {
 	 * @param buckets
 	 *            the values to which {@code value} can be rounded. Rounding goes to the appropriate bucket value as
 	 *            specified by the {@link RoundingMode} passed to {@code rm}
-	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode}
+	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode} passed to
+	 *         {@code rm}
 	 * @throws OutOfRangeException
 	 *             if there is not a valid bucket value to which {@code value} can be rounded according to the
 	 *             {@link RoundingMode} passed to {@code rm}
 	 */
 	public static BigDecimal bucketRounding(BigDecimal value, RoundingMode rm, BigDecimal... buckets) {
-		return bucketRounding(value, rm, SupportFunctions.isNegative, SupportFunctions::average, SupportFunctions.isOdd, buckets);
+		return bucketRounding(value, rm, SupportFunctions::isNegative, SupportFunctions::average, SupportFunctions::isNegative, buckets);
+	}
+	
+	/**
+	 * Implementation of bucketRounding for {@link BigInteger} values.<br>
+	 * This is a convenience method for
+	 * {@link #bucketRounding(Comparable, RoundingMode, Predicate, BiFunction, Predicate, Comparable...)} that works with all
+	 * {@link RoundingMode RoundingModes}.<br>
+	 * <b>Note:</b> The values in {@code buckets} must be sorted in ascending order (the item at index 0 must be the
+	 * smallest)
+	 * 
+	 * @param value
+	 *            the value to be rounded
+	 * @param rm
+	 *            the {@link RoundingMode} to be used; if {@code rm} equals {@link RoundingMode#UNNECESSARY}, {@code value}
+	 *            is returned immediately
+	 * @param buckets
+	 *            the values to which {@code value} can be rounded. Rounding goes to the appropriate bucket value as
+	 *            specified by the {@link RoundingMode} passed to {@code rm}
+	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode} passed to
+	 *         {@code rm}
+	 * @throws OutOfRangeException
+	 *             if there is not a valid bucket value to which {@code value} can be rounded according to the
+	 *             {@link RoundingMode} passed to {@code rm}
+	 */
+	public static BigInteger bucketRounding(BigInteger value, RoundingMode rm, BigInteger... buckets) {
+		return bucketRounding(value, rm, SupportFunctions::isNegative, SupportFunctions::average, SupportFunctions::isNegative, buckets);
 	}
 	
 	/**
@@ -227,7 +314,8 @@ public class Numbers {
 	 *            specified by the {@link RoundingMode} passed to {@code rm}
 	 * @param <T>
 	 *            the type of {@link Comparable} being rounded
-	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode}
+	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode} passed to
+	 *         {@code rm}
 	 * @throws NullPointerException
 	 *             if {@code rm} equals {@link RoundingMode#UP}, {@link RoundingMode#DOWN}, {@link RoundingMode#HALF_UP},
 	 *             {@link RoundingMode#HALF_EVEN}, or {@link RoundingMode#HALF_DOWN}
@@ -268,7 +356,8 @@ public class Numbers {
 	 *            specified by the {@link RoundingMode} passed to {@code rm}.
 	 * @param <T>
 	 *            the type of {@link Comparable} being rounded
-	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode}
+	 * @return {@code value} rounded to the appropriate bucket value as specified by the {@link RoundingMode} passed to
+	 *         {@code rm}
 	 * @throws NullPointerException
 	 *             if {@code isNegative}, {@code average}, or {@code isOdd} is {@code null} and is required by the
 	 *             {@link RoundingMode} passed to {@code rm}
@@ -336,10 +425,30 @@ public class Numbers {
 }
 
 class SupportFunctions {
-	static final Predicate<BigDecimal> isOdd = value -> value.divideToIntegralValue(Numbers.TWO).compareTo(BigDecimal.ZERO) != 0, isNegative = value -> value.signum() < 0;
+	private static final BigInteger BigIntegerTwo = BigInteger.valueOf(2l);
+	
+	static final Boolean isOdd(BigDecimal value) {
+		return value.divideToIntegralValue(Numbers.TWO).compareTo(BigDecimal.ZERO) != 0;
+	}
+	
+	static final Boolean isNegative(BigDecimal value) {
+		return value.signum() < 0;
+	}
 	
 	static final BigDecimal average(BigDecimal a, BigDecimal b) {
 		return a.add(b.subtract(a).divide(Numbers.TWO));
+	}
+	
+	static final Boolean isOdd(BigInteger value) {
+		return value.mod(BigIntegerTwo).compareTo(BigInteger.ZERO) != 0;
+	}
+	
+	static final Boolean isNegative(BigInteger value) {
+		return value.signum() < 0;
+	}
+	
+	static final BigInteger average(BigInteger a, BigInteger b) {
+		return a.add(b.subtract(a).divide(BigIntegerTwo));
 	}
 	
 	static final double average(double a, double b) {
