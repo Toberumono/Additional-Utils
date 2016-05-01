@@ -27,8 +27,8 @@ public interface ExceptedBiFunction<T, U, R> {
 	 * @throws Exception
 	 *             if something goes wrong
 	 */
-			R apply(T t, U u) throws Exception;
-			
+	public R apply(T t, U u) throws Exception;
+	
 	/**
 	 * Returns a {@link BiFunction} that wraps this {@link ExceptedBiFunction} and returns {@code null} if an
 	 * {@link Exception} would have been thrown and optionally prints the stack trace of said {@link Exception}.

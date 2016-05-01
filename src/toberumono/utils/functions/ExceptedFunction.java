@@ -15,10 +15,10 @@ import java.util.function.Function;
 public interface ExceptedFunction<T, R> {
 	
 	/**
-	 * Applies this function to the given arguments.
+	 * Applies this function to the given argument.
 	 *
 	 * @param t
-	 *            the first argument
+	 *            the argument
 	 * @return the function result
 	 * @throws Exception
 	 *             if something goes wrong
