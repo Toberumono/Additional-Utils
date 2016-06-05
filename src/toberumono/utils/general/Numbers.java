@@ -87,7 +87,7 @@ public class Numbers {
 	public static int bucketRounding(int value, RoundingMode rm, int step, int start) {
 		if (rm == RoundingMode.UNNECESSARY)
 			return value;
-		int bucket = 0, i = (value - start) / step;
+		int bucket = 1, i = (value - start) / step;
 		if (i * step + start == value)
 			return value;
 		int[] buckets = new int[]{i * step + start, (i + 1) * step + start};
@@ -210,7 +210,7 @@ public class Numbers {
 	public static double bucketRounding(double value, RoundingMode rm, double step, double start) {
 		if (rm == RoundingMode.UNNECESSARY)
 			return value;
-		int bucket = 0;
+		int bucket = 1;
 		double i = (int) ((value - start) / step);
 		if (i * step + start == value)
 			return value;
