@@ -1,6 +1,7 @@
 package toberumono.utils.files;
 
 import java.io.IOException;
+import java.nio.file.CopyOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileVisitor;
 import java.nio.file.Files;
@@ -9,6 +10,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import toberumono.utils.general.MutedLogger;
@@ -40,6 +42,40 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	protected final Consumer<Path> onSkipAction;
 	protected final Predicate<Path> fileFilter, directoryFilter;
 	protected final Logger log;
+	protected final Level normalLoggingLevel, issueLoggingLevel;
+	
+	/**
+	 * Constructs a new {@link LoggedFileWalker}. Overriding classes should produce a constructor that takes the
+	 * <tt>onFailure</tt> and <tt>log</tt> parameters and passes the prefixes itself rather that requiring a user of that
+	 * class to provide them (see {@link RecursiveEraser} and {@link TransferFileWalker} for examples).<br>
+	 * The prefixes should not include any spacing characters - ": " will be appended to them automatically.<br>
+	 * Messages indicating normal operation will be logged as {@link Level#FINE} and messages indicating issues will be
+	 * logged as {@link Level#WARNING}.
+	 * 
+	 * @param preVisitDirectoryPrefix
+	 *            the prefix for the log line for {@link #preVisitDirectory(Path, BasicFileAttributes)}
+	 * @param fileVisitPrefix
+	 *            the prefix for the log line for {@link #visitFile(Path, BasicFileAttributes)}
+	 * @param postVisitDirectoryPrefix
+	 *            the prefix for the log line for {@link #postVisitDirectory(Path, IOException)}
+	 * @param fileFilter
+	 *            a {@link Predicate} for whether a given file should be processed. Default: {@link #DEFAULT_FILTER}
+	 * @param directoryFilter
+	 *            a {@link Predicate} for whether a given directory should be processed. Default: {@link #DEFAULT_FILTER}
+	 * @param onSkipAction
+	 *            an action to perform when a file or directory is skipped
+	 * @param onFailureAction
+	 *            the action to take if a file visit fails or an exception is thrown while traversing a directory. Default:
+	 *            {@link #DEFAULT_ON_FAILURE_ACTION}
+	 * @param log
+	 *            the {@link Logger} to use for logging. Default: {@link MutedLogger#getMutedLogger()}
+	 * @see Files#copy(Path, Path, CopyOption...)
+	 * @see Files#move(Path, Path, CopyOption...)
+	 */
+	public LoggedFileWalker(String preVisitDirectoryPrefix, String fileVisitPrefix, String postVisitDirectoryPrefix, Predicate<Path> fileFilter, Predicate<Path> directoryFilter,
+			Consumer<Path> onSkipAction, BiFunction<Path, IOException, FileVisitResult> onFailureAction, Logger log) {
+		this(preVisitDirectoryPrefix, fileVisitPrefix, postVisitDirectoryPrefix, fileFilter, directoryFilter, onSkipAction, onFailureAction, log, Level.FINE, Level.WARNING);
+	}
 	
 	/**
 	 * Constructs a new {@link LoggedFileWalker}. Overriding classes should produce a constructor that takes the
@@ -64,11 +100,15 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	 *            {@link #DEFAULT_ON_FAILURE_ACTION}
 	 * @param log
 	 *            the {@link Logger} to use for logging. Default: {@link MutedLogger#getMutedLogger()}
+	 * @param normalLoggingLevel
+	 *            the {@link Level} to use for messages that are logged during normal operation
+	 * @param issueLoggingLevel
+	 *            the {@link Level} to use for messages that are logged when issues occur
 	 * @see Files#copy(Path, Path, java.nio.file.CopyOption...)
 	 * @see Files#move(Path, Path, java.nio.file.CopyOption...)
 	 */
 	public LoggedFileWalker(String preVisitDirectoryPrefix, String fileVisitPrefix, String postVisitDirectoryPrefix, Predicate<Path> fileFilter, Predicate<Path> directoryFilter,
-			Consumer<Path> onSkipAction, BiFunction<Path, IOException, FileVisitResult> onFailureAction, Logger log) {
+			Consumer<Path> onSkipAction, BiFunction<Path, IOException, FileVisitResult> onFailureAction, Logger log, Level normalLoggingLevel, Level issueLoggingLevel) {
 		this.preVisitDirectoryPrefix = preVisitDirectoryPrefix + ": ";
 		this.fileVisitPrefix = fileVisitPrefix + ": ";
 		this.postVisitDirectoryPrefix = postVisitDirectoryPrefix + ": ";
@@ -77,6 +117,8 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 		this.onSkipAction = onSkipAction == null ? DEFAULT_ON_SKIP_ACTION : onSkipAction;
 		this.onFailureAction = onFailureAction == null ? DEFAULT_ON_FAILURE_ACTION : onFailureAction;
 		this.log = log == null ? MutedLogger.getMutedLogger() : log;
+		this.normalLoggingLevel = normalLoggingLevel;
+		this.issueLoggingLevel = issueLoggingLevel;
 	}
 	
 	/**
@@ -89,11 +131,11 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	@Override
 	public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
 		if (!directoryFilter.test(dir)) {
-			log.info("Skipped: " + dir);
+			log.log(normalLoggingLevel, "Skipped: " + dir);
 			return FileVisitResult.SKIP_SUBTREE;
 		}
 		FileVisitResult result = preVisitDirectoryAction(dir, attrs);
-		log.info(preVisitDirectoryPrefix + dir);
+		log.log(normalLoggingLevel, preVisitDirectoryPrefix + dir);
 		return result;
 	}
 	
@@ -125,11 +167,11 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	@Override
 	public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 		if (!fileFilter.test(file)) {
-			log.info("Skipped: " + file);
+			log.log(normalLoggingLevel, "Skipped: " + file);
 			return FileVisitResult.CONTINUE;
 		}
 		FileVisitResult result = visitFileAction(file, attrs);
-		log.info(fileVisitPrefix + file);
+		log.log(normalLoggingLevel, fileVisitPrefix + file);
 		return result;
 	}
 	
@@ -173,8 +215,8 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	 * @return the visit result
 	 */
 	public FileVisitResult onFailure(Path path, IOException exc) {
-		log.warning("Failed: " + path.toString());
-		log.fine(exc.getLocalizedMessage());
+		log.log(issueLoggingLevel, "Failed: " + path.toString());
+		log.finer(exc.getLocalizedMessage());
 		for (StackTraceElement e : exc.getStackTrace())
 			log.finest(e.toString());
 		return onFailureAction.apply(path, exc);
@@ -191,7 +233,7 @@ public abstract class LoggedFileWalker implements FileVisitor<Path> {
 	@Override
 	public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
 		FileVisitResult result = postVisitDirectoryAction(dir, exc);
-		log.info(postVisitDirectoryPrefix + dir);
+		log.log(normalLoggingLevel, postVisitDirectoryPrefix + dir);
 		return result;
 	}
 	
