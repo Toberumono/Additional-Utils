@@ -223,7 +223,7 @@ public class TransferFileWalker extends LoggedFileWalker {
 	public FileVisitResult preVisitDirectoryAction(Path dir, BasicFileAttributes attrs) throws IOException {
 		if (depth++ == 0) {
 			source = dir;
-			log.info("Started transfer: " + source + " -> " + target);
+			log.log(normalLoggingLevel, "Started transfer: " + source + " -> " + target);
 			if (forceRoot)
 				Files.createDirectories(target);
 		}
@@ -244,9 +244,9 @@ public class TransferFileWalker extends LoggedFileWalker {
 			onFailure(dir, exc);
 		if (--depth == 0) {
 			if (exc == null)
-				log.info("Completed transfer: " + source + " -> " + target);
+				log.log(normalLoggingLevel, "Completed transfer: " + source + " -> " + target);
 			else
-				log.warning("Failed transfer: " + source + " -> " + target);
+				log.log(issueLoggingLevel, "Failed transfer: " + source + " -> " + target);
 			source = null;
 		}
 		return FileVisitResult.CONTINUE;
