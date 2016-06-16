@@ -96,7 +96,8 @@ public class TransferFileWalker extends LoggedFileWalker {
 	
 	/**
 	 * Constructs a new {@link TransferFileWalker} with different filter criteria for files and directories. All arguments to
-	 * this method except for {@code target} and {@code action} can be {@code null}, in which case their default values will be used.
+	 * this method except for {@code target} and {@code action} can be {@code null}, in which case their default values will
+	 * be used.
 	 * 
 	 * @param target
 	 *            a {@link Path} to the root directory into which the files should be transferred (this need not exist before
@@ -175,13 +176,15 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 *            the {@link Level} to use for messages that are logged when issues occur
 	 * @see BasicTransferActions
 	 */
-	public TransferFileWalker(Path target, TransferAction action, Predicate<Path> filter, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log, Level normalLoggingLevel, Level issueLoggingLevel) {
+	public TransferFileWalker(Path target, TransferAction action, Predicate<Path> filter, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log, Level normalLoggingLevel,
+			Level issueLoggingLevel) {
 		this(target, action, filter, filter, onFailure, log, false);
 	}
 	
 	/**
 	 * Constructs a new {@link TransferFileWalker} with different filter criteria for files and directories. All arguments to
-	 * this method except for {@code target} and {@code action} can be {@code null}, in which case their default values will be used.
+	 * this method except for {@code target} and {@code action} can be {@code null}, in which case their default values will
+	 * be used.
 	 * 
 	 * @param target
 	 *            a {@link Path} to the root directory into which the files should be transferred (this need not exist before
@@ -206,8 +209,8 @@ public class TransferFileWalker extends LoggedFileWalker {
 	 *            instead place all encountered files in the folder specified by {@code target}
 	 * @see BasicTransferActions
 	 */
-	public TransferFileWalker(Path target, TransferAction action, Predicate<Path> fileFilter, Predicate<Path> directoryFilter,
-			BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log, Level normalLoggingLevel, Level issueLoggingLevel, boolean forceRoot) {
+	public TransferFileWalker(Path target, TransferAction action, Predicate<Path> fileFilter, Predicate<Path> directoryFilter, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log,
+			Level normalLoggingLevel, Level issueLoggingLevel, boolean forceRoot) {
 		super("Started", "Transferred", "Finished", fileFilter, directoryFilter, null, onFailure, log);
 		if (target == null)
 			throw new NullPointerException("Cannot have a null target.");
