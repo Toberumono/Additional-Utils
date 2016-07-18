@@ -39,11 +39,11 @@ public class Configuration implements Cloneable {
 	/**
 	 * Copy constructor for a {@link Configuration} object
 	 * 
-	 * @param origial
+	 * @param original
 	 *            the {@link Configuration} to be copied
 	 */
-	public Configuration(Configuration origial) {
-		transferFields(origial, this);
+	public Configuration(Configuration original) {
+		original.transferFields(this);
 	}
 	
 	/**
@@ -57,37 +57,7 @@ public class Configuration implements Cloneable {
 	 *            used to synchronize the types in the transfer. This will be automatically determined if the method is used correctly.
 	 */
 	public static final <T extends Configuration> void transferFields(T source, T destination) {
-		try {
-			for (Field f : source.getClass().getFields()) {
-				f.setAccessible(true); //This is required in order for the field access to not throw IllegalAccessExceptions
-				if (f.getName().length() > ((Configuration) destination).fieldNameWidth) //For use in the printing function
-					((Configuration) destination).fieldNameWidth = f.getName().length();
-				if (f.isAnnotationPresent(Clone.class)) { //If this field should be cloned when the Configuration is cloned, use the copy constructor
-					cloneAttempt: {
-						if (Cloneable.class.isAssignableFrom(f.getType())) {
-							try {
-								Method clone = f.getType().getMethod("clone");
-								clone.setAccessible(true);
-								f.set(destination, clone.invoke(f.get(source)));
-								break cloneAttempt;
-							}
-							catch (IllegalArgumentException | SecurityException | ReflectiveOperationException | ExceptionInInitializerError e) {
-								//Nothing to do here - we just use the clone method if possible
-							}
-						}
-						Constructor<?> cons = f.getType().getConstructor(f.getType());
-						cons.setAccessible(true);
-						f.set(destination, cons.newInstance(f.get(source)));
-					}
-				}
-				//Otherwise, if this is a property or some other value that should be copied, copy it
-				else if (f.isAnnotationPresent(Property.class) || f.isAnnotationPresent(Copy.class))
-					f.set(destination, f.get(source));
-			}
-		}
-		catch (ReflectiveOperationException e) {
-			throw new RuntimeException("Unable to transfer all fields.", e);
-		}
+		source.transferFields(destination);
 	}
 	
 	protected void transferFields(Configuration destination) {
