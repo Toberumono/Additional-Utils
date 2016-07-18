@@ -5,6 +5,7 @@ import java.io.PrintWriter;
 import java.io.Writer;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 
 import toberumono.utils.classes.dynamic.Clone;
@@ -12,11 +13,10 @@ import toberumono.utils.classes.dynamic.Copy;
 import toberumono.utils.classes.dynamic.Property;
 
 /**
- * This class is designed to facilitate container classes that can be extended quickly and relatively painlessly by using the
- * reflections API and marking fields with the {@link Property}, {@link Clone}, and {@link Copy} annotations to dynamically
- * create the copy constructor (which calls {@link #transferFields(Configuration, Configuration)}) and the
- * {@link #equals(Object)}, {@link #load(Properties)}, and {@link #save(Writer)} methods for all of its subclasses at
- * runtime.
+ * This class is designed to facilitate container classes that can be extended quickly and relatively painlessly by using the reflections API and
+ * marking fields with the {@link Property}, {@link Clone}, and {@link Copy} annotations to dynamically create the copy constructor (which calls
+ * {@link #transferFields(Configuration, Configuration)}) and the {@link #equals(Object)}, {@link #load(Properties)}, and {@link #save(Writer)}
+ * methods for all of its subclasses at runtime.
  *
  * @author Toberumono
  * @version 1.1
@@ -34,7 +34,7 @@ public class Configuration implements Cloneable {
 	/**
 	 * Public null constructor used to create a set of variables with default values and also during stream loading.
 	 */
-	public Configuration() { /* All default values are in the field declarations */}
+	public Configuration() {/* All default values are in the field declarations */}
 	
 	/**
 	 * Copy constructor for a {@link Configuration} object
@@ -54,29 +54,73 @@ public class Configuration implements Cloneable {
 	 * @param destination
 	 *            the {@link Configuration} instance to copy to
 	 * @param <T>
-	 *            used to synchronize the types in the transfer. This will be automatically determined if the method is used
-	 *            correctly.
+	 *            used to synchronize the types in the transfer. This will be automatically determined if the method is used correctly.
 	 */
-	public final <T extends Configuration> void transferFields(T source, T destination) {
+	public static final <T extends Configuration> void transferFields(T source, T destination) {
 		try {
 			for (Field f : source.getClass().getFields()) {
 				f.setAccessible(true); //This is required in order for the field access to not throw IllegalAccessExceptions
 				if (f.getName().length() > ((Configuration) destination).fieldNameWidth) //For use in the printing function
 					((Configuration) destination).fieldNameWidth = f.getName().length();
 				if (f.isAnnotationPresent(Clone.class)) { //If this field should be cloned when the Configuration is cloned, use the copy constructor
-					Constructor<?> cons = f.getType().getConstructor(f.getType());
-					cons.setAccessible(true);
-					f.set(destination, cons.newInstance(f.get(source)));
+					cloneAttempt: {
+						if (Cloneable.class.isAssignableFrom(f.getType())) {
+							try {
+								Method clone = f.getType().getMethod("clone");
+								clone.setAccessible(true);
+								f.set(destination, clone.invoke(f.get(source)));
+								break cloneAttempt;
+							}
+							catch (IllegalArgumentException | SecurityException | ReflectiveOperationException | ExceptionInInitializerError e) {
+								//Nothing to do here - we just use the clone method if possible
+							}
+						}
+						Constructor<?> cons = f.getType().getConstructor(f.getType());
+						cons.setAccessible(true);
+						f.set(destination, cons.newInstance(f.get(source)));
+					}
 				}
 				//Otherwise, if this is a property or some other value that should be copied, copy it
 				else if (f.isAnnotationPresent(Property.class) || f.isAnnotationPresent(Copy.class))
 					f.set(destination, f.get(source));
 			}
 		}
-		catch (IllegalArgumentException | ReflectiveOperationException e) {
-			System.err.println("Unable to copy all fields.");
-			System.err.println(e.getMessage());
-			e.printStackTrace();
+		catch (ReflectiveOperationException e) {
+			throw new RuntimeException("Unable to transfer all fields.", e);
+		}
+	}
+	
+	protected void transferFields(Configuration destination) {
+		try {
+			for (Field f : getClass().getFields()) {
+				f.setAccessible(true); //This is required in order for the field access to not throw IllegalAccessExceptions
+				if (f.getName().length() > destination.fieldNameWidth) //For use in the printing function
+					destination.fieldNameWidth = f.getName().length();
+				if (f.isAnnotationPresent(Clone.class)) { //If this field should be cloned when the Configuration is cloned, use the copy constructor
+					cloneAttempt: {
+						if (Cloneable.class.isAssignableFrom(f.getType())) {
+							try {
+								Method clone = f.getType().getMethod("clone");
+								clone.setAccessible(true);
+								f.set(destination, clone.invoke(f.get(this)));
+								break cloneAttempt;
+							}
+							catch (IllegalArgumentException | SecurityException | ReflectiveOperationException | ExceptionInInitializerError e) {
+								//Nothing to do here - we just use the clone method if possible
+							}
+						}
+						Constructor<?> cons = f.getType().getConstructor(f.getType());
+						cons.setAccessible(true);
+						f.set(destination, cons.newInstance(f.get(this)));
+					}
+				}
+				//Otherwise, if this is a property or some other value that should be copied, copy it
+				else if (f.isAnnotationPresent(Property.class) || f.isAnnotationPresent(Copy.class))
+					f.set(destination, f.get(this));
+			}
+		}
+		catch (ReflectiveOperationException e) {
+			throw new RuntimeException("Unable to transfer all fields.", e);
 		}
 	}
 	
@@ -87,17 +131,24 @@ public class Configuration implements Cloneable {
 	 */
 	@Override
 	public synchronized Object clone() {
-		return new Configuration(this);
+		try {
+			Configuration out = (Configuration) super.clone();
+			transferFields(out);
+			return out;
+		}
+		catch (CloneNotSupportedException e) {
+			throw new RuntimeException(e); //CloneNotSupportedException cannot occur
+		}
 	}
 	
 	/**
-	 * Determines whether this set of variables equals another object. It returns true if <tt>other</tt> is not null, is an
-	 * instance of {@link Configuration} or a subclass thereof, and contains the same field values.<br>
+	 * Determines whether this set of variables equals another object. It returns true if <tt>other</tt> is not null, is an instance of
+	 * {@link Configuration} or a subclass thereof, and contains the same field values.<br>
 	 * This method tests only the public fields annotated with {@link Property}.
 	 *
 	 * @param other
-	 *            any object reference including null; however, this method will only return true if <tt>other</tt> is
-	 *            non-null and an instance of {@link Configuration} or a subclass thereof
+	 *            any object reference including null; however, this method will only return true if <tt>other</tt> is non-null and an instance of
+	 *            {@link Configuration} or a subclass thereof
 	 * @return true if this and <tt>other</tt>'s public fields annotated with {@link Property} are equivalent.
 	 */
 	@Override
@@ -124,9 +175,8 @@ public class Configuration implements Cloneable {
 	}
 	
 	/**
-	 * Loads the values from a {@link Properties} container (read from a configuration file) into the {@link Configuration
-	 * Configuration's} fields. If the property strings are invalid, default values for the affected fields remain unchanged.
-	 * If props is null, nothing happens.
+	 * Loads the values from a {@link Properties} container (read from a configuration file) into the {@link Configuration Configuration's} fields. If
+	 * the property strings are invalid, default values for the affected fields remain unchanged. If props is null, nothing happens.
 	 * 
 	 * @param props
 	 *            the {@link Properties} container to load from
@@ -199,8 +249,8 @@ public class Configuration implements Cloneable {
 	 * 
 	 * @param o
 	 *            an {@link Object} of any type, including arrays, or {@code null}
-	 * @return "null" if o is {@code null}, {@code o.toString()} if <tt>o</tt> is not an array, or a {@link String}
-	 *         representation of the array with recursive calls to {@link #arrayToString(Object)}
+	 * @return "null" if o is {@code null}, {@code o.toString()} if <tt>o</tt> is not an array, or a {@link String} representation of the array with
+	 *         recursive calls to {@link #arrayToString(Object)}
 	 */
 	private String arrayToString(Object o) {
 		if (o == null)

@@ -8,8 +8,8 @@ import java.lang.annotation.Target;
 
 /**
  * Used to mark fields that should be cloned via a copy constructor when cloning the {@link DynamicCloner} instance it is in.<br>
- * All fields marked with this annotation <i>must</i> have a copy constructor that takes a single value of the type of the
- * object being cloned and is declared as public.
+ * All fields marked with this annotation <i>must</i> have <i>either</i> a copy constructor (a publicly-visible constructor that takes a single value of the type of the
+ * object being cloned) or implement {@link Cloneable} and have a publicly visible {@code clone} method.
  * 
  * @author Toberumono
  * @see Property
