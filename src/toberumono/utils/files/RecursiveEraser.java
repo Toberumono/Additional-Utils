@@ -8,6 +8,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import toberumono.utils.general.MutedLogger;
@@ -64,6 +65,53 @@ public class RecursiveEraser extends LoggedFileWalker {
 	 */
 	public RecursiveEraser(Predicate<Path> fileFilter, Predicate<Path> directoryFilter, Consumer<Path> onSkip, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log) {
 		this(fileFilter, directoryFilter, onSkip, onFailure, log, new DeletionBound());
+	}
+	
+	/**
+	 * Constructs a new {@link RecursiveEraser}.<br>
+	 * Both <tt>onFailure</tt> and <tt>log</tt> can be null, in which case their default values will be used.
+	 * 
+	 * @param onFailure
+	 *            the action to take if a file visit fails. Default: {@link #DEFAULT_ON_FAILURE_ACTION}
+	 * @param log
+	 *            the {@link Logger} to use for logging. Default: {@link MutedLogger#getMutedLogger()}
+	 * @param normalLoggingLevel
+	 *            the {@link Level} to use for messages that are logged during normal operation
+	 * @param issueLoggingLevel
+	 *            the {@link Level} to use for messages that are logged when issues occur
+	 */
+	public RecursiveEraser(BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log, Level normalLoggingLevel, Level issueLoggingLevel) {
+		this(null, null, null, onFailure, log, normalLoggingLevel, issueLoggingLevel);
+	}
+	
+	/**
+	 * Constructs a new {@link RecursiveEraser}.<br>
+	 * Both <tt>onFailure</tt> and <tt>log</tt> can be null, in which case their default values will be used.
+	 * 
+	 * @param fileFilter
+	 *            a {@link Predicate} for whether a given file should be processed. Default: {@link #DEFAULT_FILTER}
+	 * @param directoryFilter
+	 *            a {@link Predicate} for whether a given directory should be processed. Default: {@link #DEFAULT_FILTER}
+	 * @param onSkip
+	 *            an action to perform when a file or directory is skipped. Default: {@link #DEFAULT_ON_SKIP_ACTION}
+	 * @param onFailure
+	 *            the action to take if a file visit fails. Default: {@link #DEFAULT_ON_FAILURE_ACTION}
+	 * @param log
+	 *            the {@link Logger} to use for logging. Default: {@link MutedLogger#getMutedLogger()}
+	 * @param normalLoggingLevel
+	 *            the {@link Level} to use for messages that are logged during normal operation
+	 * @param issueLoggingLevel
+	 *            the {@link Level} to use for messages that are logged when issues occur
+	 */
+	public RecursiveEraser(Predicate<Path> fileFilter, Predicate<Path> directoryFilter, Consumer<Path> onSkip, BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log,
+			Level normalLoggingLevel, Level issueLoggingLevel) {
+		this(fileFilter, directoryFilter, onSkip, onFailure, log, normalLoggingLevel, issueLoggingLevel, new DeletionBound());
+	}
+	
+	private RecursiveEraser(Predicate<Path> fileFilter, Predicate<Path> directoryFilter, final Consumer<Path> onSkip, final BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log,
+			Level normalLoggingLevel, Level issueLoggingLevel, final DeletionBound del) {
+		super("Started Deleting", "Deleted", "Finished Deleting", fileFilter, directoryFilter, new OnSkipFunction(onSkip, del), new OnFailureFunction(onFailure, del), log, normalLoggingLevel, issueLoggingLevel);
+		this.del = del;
 	}
 	
 	private RecursiveEraser(Predicate<Path> fileFilter, Predicate<Path> directoryFilter, final Consumer<Path> onSkip, final BiFunction<Path, IOException, FileVisitResult> onFailure, Logger log,

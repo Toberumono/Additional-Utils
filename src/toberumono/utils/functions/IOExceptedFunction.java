@@ -15,10 +15,10 @@ import java.io.IOException;
 public interface IOExceptedFunction<T, R> extends ExceptedFunction<T, R> {
 	
 	/**
-	 * Applies this function to the given arguments.
+	 * Applies this function to the given argument.
 	 * 
 	 * @param t
-	 *            the first argument
+	 *            the argument
 	 * @return the function result
 	 * @throws IOException
 	 *             if something goes wrong

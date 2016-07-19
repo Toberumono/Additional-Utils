@@ -14,21 +14,21 @@ import java.util.function.Consumer;
 public interface IOExceptedConsumer<T> {
 	
 	/**
-	 * Applies this function to the given arguments.
+	 * Applies this function to the given argument.
 	 *
 	 * @param t
-	 *            the first argument
+	 *            the argument
 	 * @throws IOException
 	 *             if something goes wrong
 	 */
 	public void accept(T t) throws IOException;
 	
 	/**
-	 * Applies this function to the given arguments.<br>
+	 * Applies this function to the given argument.<br>
 	 * Forwards to {@link #accept(Object)}.
 	 *
 	 * @param t
-	 *            the first argument
+	 *            the argument
 	 * @throws IOException
 	 *             if something goes wrong
 	 * @see #accept(Object)
