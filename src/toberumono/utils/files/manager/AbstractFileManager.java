@@ -39,6 +39,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
 
 import static java.nio.file.StandardWatchEventKinds.*;
+import toberumono.utils.functions.IOExceptedPredicate;
 
 /**
  * An extendible implementation of the core logic needed to implement a thread-safe {@link FileManager}.
@@ -46,31 +47,15 @@ import static java.nio.file.StandardWatchEventKinds.*;
  * @author Toberumono
  */
 public abstract class AbstractFileManager implements FileManager {
-	/**
-	 * A {@link Comparator} for {@link StandardWatchEventKinds} that prioritizes the kinds from greatest to least as follows:
-	 * <ol>
-	 * <li>{@link StandardWatchEventKinds#ENTRY_CREATE ENTRY_CREATE}</li>
-	 * <li>{@link StandardWatchEventKinds#ENTRY_MODIFY ENTRY_MODIFY}</li>
-	 * <li>{@link StandardWatchEventKinds#ENTRY_DELETE ENTRY_DELETE}</li>
-	 * </ol>
-	 */
-	public static final Comparator<WatchEvent<?>> DEFAULT_KINDS_COMPARATOR = (a, b) -> {
-		if (a.kind().equals(b.kind())) //We only need to check this once
-			return 0;
-		if (a.kind().equals(StandardWatchEventKinds.ENTRY_CREATE)) //ENTRY_CREATE has first priority, and we know that a.kind() != b.kind(), so a > b
-			return 1;
-		if (a.kind().equals(StandardWatchEventKinds.ENTRY_MODIFY)) //ENTRY_MODIFY has second priority (after ENTRY_CREATE, but before ENTRY_DELETE)
-			return b.kind().equals(StandardWatchEventKinds.ENTRY_CREATE) ? -1 : 1; //ENTRY_CREATE has higher priority than ENTRY_MODIFY, so b > a
-		if (a.kind().equals(StandardWatchEventKinds.ENTRY_DELETE)) //ENTRY_DELETE has last priority, and we know that a.kind() != b.kind(), so b > a
-			return -1;
-		return 0;
-	};
 	
 	/**
-	 * A {@link Predicate} that returns {@code true} for all {@link Path Paths} whose {@link Path#getFileName() file name}
-	 * components do <i>not</i> start with a '.'
+	 * A {@link Predicate} that returns {@code true} for all {@link Path Paths} that point to items that are <i>not</i> hidden (as defined by
+	 * {@link Files#isHidden(Path)}).
 	 */
-	public static final Predicate<Path> DEFAULT_FILTER = p -> !p.getFileName().toString().startsWith(".");
+	public static final IOExceptedPredicate<Path> DEFAULT_FILTER = ((IOExceptedPredicate<Path>) Files::isHidden).negate();
+	
+	/**
+	 */
 	private static final long watchLoopTimeout = 500;
 	private static final TimeUnit watchLoopTimeoutUnit = TimeUnit.MILLISECONDS;
 	
