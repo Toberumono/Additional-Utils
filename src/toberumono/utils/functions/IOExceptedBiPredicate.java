@@ -1,11 +1,12 @@
 package toberumono.utils.functions;
 
+import java.io.IOException;
 import java.util.Objects;
 import java.util.function.BiPredicate;
 
 /**
- * A simple functional interface that represents the equivalent of {@link BiPredicate} that can throw an {@link Exception}.<br>
- * {@link #and(ExceptedBiPredicate)}, {@link #negate()}, and {@link #or(ExceptedBiPredicate)} (including their documentation) are all from
+ * A simple functional interface that represents the equivalent of {@link BiPredicate} that can throw an {@link IOException}.<br>
+ * {@link #and(IOExceptedBiPredicate)}, {@link #negate()}, and {@link #or(IOExceptedBiPredicate)} (including their documentation) are all from
  * {@link BiPredicate} in the Java API.
  * 
  * @author Toberumono
@@ -15,7 +16,7 @@ import java.util.function.BiPredicate;
  *            the type of the second argument the predicate
  */
 @FunctionalInterface
-public interface ExceptedBiPredicate<T, U> {
+public interface IOExceptedBiPredicate<T, U> {
 	
 	/**
 	 * Evaluates this predicate on the given arguments.
@@ -25,10 +26,10 @@ public interface ExceptedBiPredicate<T, U> {
 	 * @param u
 	 *            the second input argument
 	 * @return {@code true} if the input arguments match the predicate, otherwise {@code false}
-	 * @throws Exception
-	 *             if something goes wrong
+	 * @throws IOException
+	 *             if an I/O error occurs
 	 */
-	public boolean test(T t, U u) throws Exception;
+	public boolean test(T t, U u) throws IOException;
 	
 	/**
 	 * Returns a composed predicate that represents a short-circuiting logical AND of this predicate and another. When evaluating the composed
@@ -43,7 +44,7 @@ public interface ExceptedBiPredicate<T, U> {
 	 * @throws NullPointerException
 	 *             if other is {@code null}
 	 */
-	public default ExceptedBiPredicate<T, U> and(ExceptedBiPredicate<? super T, ? super U> other) {
+	public default IOExceptedBiPredicate<T, U> and(IOExceptedBiPredicate<? super T, ? super U> other) {
 		Objects.requireNonNull(other);
 		return (T t, U u) -> test(t, u) && other.test(t, u);
 	}
@@ -53,7 +54,7 @@ public interface ExceptedBiPredicate<T, U> {
 	 *
 	 * @return a predicate that represents the logical negation of this predicate
 	 */
-	public default ExceptedBiPredicate<T, U> negate() {
+	public default IOExceptedBiPredicate<T, U> negate() {
 		return (T t, U u) -> !test(t, u);
 	}
 	
@@ -70,32 +71,32 @@ public interface ExceptedBiPredicate<T, U> {
 	 * @throws NullPointerException
 	 *             if other is {@code null}
 	 */
-	public default ExceptedBiPredicate<T, U> or(ExceptedBiPredicate<? super T, ? super U> other) {
+	public default IOExceptedBiPredicate<T, U> or(IOExceptedBiPredicate<? super T, ? super U> other) {
 		Objects.requireNonNull(other);
 		return (T t, U u) -> test(t, u) || other.test(t, u);
 	}
 	
 	/**
-	 * @return a {@link BiPredicate} that wraps any thrown {@link Exception Exceptions} in a {@link RuntimeException}
+	 * @return a {@link BiPredicate} that wraps any thrown {@link IOException IOExceptions} in a {@link RuntimeException}
 	 */
 	public default BiPredicate<T, U> toWrappingBiPredicate() {
 		return (t, u) -> {
 			try {
 				return this.test(t, u);
 			}
-			catch (Exception e) {
+			catch (IOException e) {
 				throw new RuntimeException(e);
 			}
 		};
 	}
 	
 	/**
-	 * Returns a {@link BiPredicate} that wraps this {@link ExceptedBiPredicate} and returns {@code false} if an {@link Exception} would have been
-	 * thrown and optionally prints the stack trace of said {@link Exception}.
+	 * Returns a {@link BiPredicate} that wraps this {@link IOExceptedBiPredicate} and returns {@code false} if an {@link IOException} would have been
+	 * thrown and optionally prints the stack trace of said {@link IOException}.
 	 * 
 	 * @param printStackTrace
-	 *            whether to print the stack trace of {@link Exception} thrown by this function when called from within the wrapper
-	 * @return a {@link BiPredicate} that wraps this {@link ExceptedBiPredicate}
+	 *            whether to print the stack trace of {@link IOException} thrown by this function when called from within the wrapper
+	 * @return a {@link BiPredicate} that wraps this {@link IOExceptedBiPredicate}
 	 * @see #toBiPredicate(boolean, boolean)
 	 */
 	public default BiPredicate<T, U> toBiPredicate(boolean printStackTrace) {
@@ -103,14 +104,14 @@ public interface ExceptedBiPredicate<T, U> {
 	}
 	
 	/**
-	 * Returns a {@link BiPredicate} that wraps this {@link ExceptedBiPredicate} and returns {@code exceptionReturn} if an {@link Exception} would
-	 * have been thrown and optionally prints the stack trace of said {@link Exception}.
+	 * Returns a {@link BiPredicate} that wraps this {@link IOExceptedBiPredicate} and returns {@code exceptionReturn} if an {@link IOException} would
+	 * have been thrown and optionally prints the stack trace of said {@link IOException}.
 	 * 
 	 * @param printStackTrace
-	 *            whether to print the stack trace of {@link Exception} thrown by this function when called from within the wrapper
+	 *            whether to print the stack trace of {@link IOException} thrown by this function when called from within the wrapper
 	 * @param exceptionReturn
-	 *            the value to return when an {@link Exception} is thrown
-	 * @return a {@link BiPredicate} that wraps this {@link ExceptedBiPredicate}
+	 *            the value to return when an {@link IOException} is thrown
+	 * @return a {@link BiPredicate} that wraps this {@link IOExceptedBiPredicate}
 	 * @see #toBiPredicate(boolean)
 	 */
 	public default BiPredicate<T, U> toBiPredicate(boolean printStackTrace, boolean exceptionReturn) {
@@ -119,7 +120,7 @@ public interface ExceptedBiPredicate<T, U> {
 				try {
 					return this.test(t, u);
 				}
-				catch (Exception e) {
+				catch (IOException e) {
 					e.printStackTrace();
 					return false;
 				}
@@ -129,7 +130,7 @@ public interface ExceptedBiPredicate<T, U> {
 				try {
 					return this.test(t, u);
 				}
-				catch (Exception e) {
+				catch (IOException e) {
 					return false;
 				}
 			};
