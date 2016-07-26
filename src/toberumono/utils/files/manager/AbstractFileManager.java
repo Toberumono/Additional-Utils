@@ -501,8 +501,28 @@ public abstract class AbstractFileManager implements FileManager {
 	
 	private Set<Path> analyzeTree(Path root) throws IOException {
 		Set<Path> paths = new HashSet<>();
-		Files.walkFileTree(root, FOLLOW_LINKS_SET, Integer.MAX_VALUE, new TreeAnalyzer(paths, root));
+		if (Files.exists(root))
+			Files.walkFileTree(root, Collections.EMPTY_SET, maxDepth, new TreeAnalyzer(paths, root));
+		else { //If the root path doesn't exist, then we fall back on our internal path table
+			buildPathTreeFromTable(root, paths);
+		}
 		return paths;
+	}
+	
+	private void buildPathTreeFromTable(Path root, Set<Path> paths) {
+		paths.add(root);
+		for (Path path : this.paths.keySet())
+			if (path.startsWith(root) && symlinks.containsKey(path))
+				buildPathTreeFromTable(symlinks.get(path), paths);
+	}
+	
+	private Set<Path> expandMinimalPathSet(Set<Path> paths) {
+		Set<Path> expanded = new HashSet<>();
+		for (Path path : paths)
+			for (Path p : this.paths.keySet())
+				if (p.startsWith(path))
+					expanded.add(p);
+		return expanded;
 	}
 	
 	private class PathAdder extends PathUpdater<Path, IOExceptedConsumer<Path>> {
@@ -707,41 +727,45 @@ public abstract class AbstractFileManager implements FileManager {
 			e.printStackTrace();
 		}
 	}
-}
-
-class TreeAnalyzer extends SimpleFileVisitor<Path> {
-	private final Set<Path> paths;
-	private final Stack<Path> route;
 	
-	public TreeAnalyzer(Set<Path> paths, Path root) {
-		this.paths = paths;
-		route = new Stack<>();
-		route.push(root);
-	}
-	
-	@Override
-	public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-		if (paths.contains(dir))
-			return FileVisitResult.SKIP_SUBTREE;
-		if (!dir.startsWith(route.peek()))
-			paths.add(dir);
-		route.push(dir);
-		return FileVisitResult.CONTINUE;
-	}
-	
-	@Override
-	public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-		if (!file.startsWith(route.peek()))
-			paths.add(file);
-		return FileVisitResult.CONTINUE;
-	}
-	
-	@Override
-	public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-		route.pop();
-		if (exc != null)
-			throw exc;
-		return FileVisitResult.CONTINUE;
+	private class TreeAnalyzer extends SimpleFileVisitor<Path> {
+		private final Set<Path> paths;
+		private final Stack<Path> route;
+		
+		public TreeAnalyzer(Set<Path> paths, Path root) {
+			this.paths = paths;
+			route = new Stack<>();
+			route.push(root);
+		}
+		
+		@Override
+		public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+			if (paths.contains(dir) || !filter.test(dir))
+				return FileVisitResult.SKIP_SUBTREE;
+			if (!dir.startsWith(route.peek()))
+				paths.add(dir);
+			route.push(dir);
+			return FileVisitResult.CONTINUE;
+		}
+		
+		@Override
+		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+			if (!filter.test(file))
+				return FileVisitResult.CONTINUE;
+			if (!file.startsWith(route.peek()))
+				paths.add(file);
+			if (attrs.isSymbolicLink())
+				Files.walkFileTree(Files.readSymbolicLink(file), Collections.EMPTY_SET, maxDepth, this);
+			return FileVisitResult.CONTINUE;
+		}
+		
+		@Override
+		public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+			route.pop();
+			if (exc != null)
+				throw exc;
+			return FileVisitResult.CONTINUE;
+		}
 	}
 }
 
