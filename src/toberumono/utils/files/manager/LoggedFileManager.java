@@ -108,24 +108,4 @@ public class LoggedFileManager extends AbstractFileManager {
 		else
 			logger.log(Level.SEVERE, "Error while processing the item at " + path);
 	}
-	
-	/**
-	 * Testing method
-	 * 
-	 * @param args
-	 *            ignored
-	 * @throws IOException
-	 *             because handling these is pointless here
-	 */
-	public static void main(String[] args) throws IOException {
-		FileManager fm = new LoggedFileManager();
-		long time = System.nanoTime();
-		fm.add(Paths.get("/Users/joshualipstone/Downloads"));
-		fm.add(Paths.get("/Users/joshualipstone/Downloads/Compressed/"));
-		System.out.println((System.nanoTime() - time) / 1000000);
-		Scanner delay = new Scanner(System.in);
-		delay.nextLine();
-		delay.close();
-		fm.close();
-	}
 }

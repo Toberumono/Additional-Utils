@@ -4,10 +4,13 @@ import java.io.IOException;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchService;
 import java.util.Comparator;
-import java.util.function.Predicate;
+import java.util.Scanner;
+
+import toberumono.utils.functions.IOExceptedPredicate;
 
 /**
  * A trivial implementation of {@link AbstractFileManager} that does nothing. This is useful for implementations that only
@@ -70,13 +73,13 @@ public class SimpleFileManager extends AbstractFileManager {
 	 *            the maximum number of processing {@link Thread Threads} that the {@link SimpleFileManager} can use. <i>Must
 	 *            be at least 1</i>
 	 * @param filter
-	 *            a {@link Predicate} that returns {@code true} iff the {@link SimpleFileManager} should process
+	 *            an {@link IOExceptedPredicate} that returns {@code true} iff the {@link SimpleFileManager} should process
 	 *            {@link WatchEvent WatchEvents} with the given {@link Path} as their {@link WatchEvent#context() context}
 	 *            (this applies to both files and directories)
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
-	public SimpleFileManager(FileSystem fileSystem, int maxThreads, Predicate<Path> filter) throws IOException {
+	public SimpleFileManager(FileSystem fileSystem, int maxThreads, IOExceptedPredicate<Path> filter) throws IOException {
 		super(fileSystem, maxThreads, filter);
 	}
 	
@@ -91,7 +94,7 @@ public class SimpleFileManager extends AbstractFileManager {
 	 *            the maximum number of processing {@link Thread Threads} that the {@link SimpleFileManager} can use. <i>Must
 	 *            be at least 1</i>
 	 * @param filter
-	 *            a {@link Predicate} that returns {@code true} iff the {@link SimpleFileManager} should process
+	 *            an {@link IOExceptedPredicate} that returns {@code true} iff the {@link SimpleFileManager} should process
 	 *            {@link WatchEvent WatchEvents} with the given {@link Path} as their {@link WatchEvent#context() context}
 	 *            (this applies to both files and directories)
 	 * @param watchEventKindsComparator
@@ -99,7 +102,7 @@ public class SimpleFileManager extends AbstractFileManager {
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
-	public SimpleFileManager(FileSystem fileSystem, int maxThreads, Predicate<Path> filter, Comparator<WatchEvent<?>> watchEventKindsComparator) throws IOException {
+	public SimpleFileManager(FileSystem fileSystem, int maxThreads, IOExceptedPredicate<Path> filter, Comparator<WatchEvent<?>> watchEventKindsComparator) throws IOException {
 		super(fileSystem, maxThreads, filter, watchEventKindsComparator);
 	}
 	
