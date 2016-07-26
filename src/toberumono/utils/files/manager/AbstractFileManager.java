@@ -311,15 +311,7 @@ public abstract class AbstractFileManager implements FileManager {
 		}
 	}
 	
-	protected void rewindAdd(Path p, Integer state) throws IOException {
-		if (state == 2) {
-			if (Files.isDirectory(p))
-				onRemoveDirectory(p);
-			else
-				onRemoveFile(p);
 		}
-		else if (state == 1)
-			deregister(p);
 	}
 	
 	/**
@@ -355,15 +347,7 @@ public abstract class AbstractFileManager implements FileManager {
 		}
 	}
 	
-	protected void rewindRemove(Path p, Integer state) throws IOException {
-		if (state == 2) {
-			if (Files.isDirectory(p))
-				onAddDirectory(p);
-			else
-				onAddFile(p);
 		}
-		else if (state == 1)
-			register(p);
 	}
 	
 	/**
@@ -521,24 +505,24 @@ public abstract class AbstractFileManager implements FileManager {
 		return paths;
 	}
 	
-	private class PathAdder extends PathUpdater<Path, Integer> {
+	private class PathAdder extends PathUpdater<Path, IOExceptedConsumer<Path>> {
 		
 		@Override
 		public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
 			if (paths.containsKey(dir) || !filter.test(dir))
 				return FileVisitResult.SKIP_SUBTREE;
 			register(dir);
-			updateState(dir, 1);
+			recordStep(dir, AbstractFileManager.this::deregister);
 			return FileVisitResult.CONTINUE;
 		}
 		
 		@Override
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-			if (!paths.containsKey(file) || !filter.test(file)) {
+			if (!paths.containsKey(file) && filter.test(file)) {
 				register(file);
-				updateState(file, 1);
+				recordStep(file, AbstractFileManager.this::deregister);
 				onAddFile(file);
-				updateState(file, 2);
+				recordStep(file, AbstractFileManager.this::onRemoveFile);
 			}
 			return FileVisitResult.CONTINUE;
 		}
@@ -548,19 +532,19 @@ public abstract class AbstractFileManager implements FileManager {
 			if (exc != null)
 				throw exc;
 			onAddDirectory(dir);
-			updateState(dir, 2);
+			recordStep(dir, AbstractFileManager.this::onRemoveDirectory);
 			return FileVisitResult.CONTINUE;
 		}
 	}
 	
-	private class PathRemover extends PathUpdater<Path, Integer> {
+	private class PathRemover extends PathUpdater<Path, IOExceptedConsumer<Path>> {
 		
 		@Override
 		public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
 			if (!paths.containsKey(dir))
 				return FileVisitResult.SKIP_SUBTREE;
 			deregister(dir);
-			updateState(dir, 1);
+			recordStep(dir, AbstractFileManager.this::register);
 			return FileVisitResult.CONTINUE;
 		}
 		
@@ -568,9 +552,9 @@ public abstract class AbstractFileManager implements FileManager {
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 			if (paths.containsKey(file)) {
 				deregister(file);
-				updateState(file, 1);
+				recordStep(file, AbstractFileManager.this::register);
 				onRemoveFile(file);
-				updateState(file, 2);
+				recordStep(file, AbstractFileManager.this::onAddFile);
 			}
 			return FileVisitResult.CONTINUE;
 		}
@@ -580,7 +564,7 @@ public abstract class AbstractFileManager implements FileManager {
 			if (exc != null)
 				throw exc;
 			onRemoveDirectory(dir);
-			updateState(dir, 2);
+			recordStep(dir, AbstractFileManager.this::onAddDirectory);
 			return FileVisitResult.CONTINUE;
 		}
 	}
