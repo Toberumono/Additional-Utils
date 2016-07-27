@@ -428,21 +428,6 @@ public abstract class AbstractFileManager implements FileManager {
 	 */
 	protected abstract void handleException(Path path, Throwable t);
 	
-	/**
-	 * Optional convenience method for implementations that have specific logic for {@link IOException IOExceptions}.<br>
-	 * The default implementation forwards to {@link #handleException(Path, Throwable)}.
-	 * 
-	 * @param path
-	 *            the {@link Path} that was being processed at the time of the exception; if the {@link Path} is not known, this parameter will be
-	 *            {@code null}
-	 * @param e
-	 *            the thrown {@link IOException}
-	 * @see #handleException(Path, Throwable)
-	 */
-	protected void handleException(Path path, IOException e) {
-		handleException(path, (Throwable) e);
-	}
-	
 	@Override
 	public Set<Path> getPaths() {
 		if (unmodifiablePaths == null)

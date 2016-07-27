@@ -19,7 +19,6 @@ import toberumono.utils.functions.IOExceptedConsumer;
 public class LambdaFileManager extends AbstractFileManager {
 	private final IOExceptedConsumer<Path> onAddFile, onAddDirectory, onRemoveFile, onRemoveDirectory, onChangeFile, onChangeDirectory;
 	private final BiConsumer<Path, Throwable> handleThrowable;
-	private final BiConsumer<Path, IOException> handleIOException;
 	
 	/**
 	 * Constructs a {@link LambdaFileManager} on the default {@link FileSystem} with the given actions.
@@ -85,38 +84,6 @@ public class LambdaFileManager extends AbstractFileManager {
 	 */
 	public LambdaFileManager(IOExceptedConsumer<Path> onAddFile, IOExceptedConsumer<Path> onAddDirectory, IOExceptedConsumer<Path> onRemoveFile, IOExceptedConsumer<Path> onRemoveDirectory,
 			IOExceptedConsumer<Path> onChangeFile, IOExceptedConsumer<Path> onChangeDirectory, BiConsumer<Path, Throwable> handleThrowable, FileSystem fileSystem) throws IOException {
-		this(onAddFile, onAddDirectory, onRemoveFile, onRemoveDirectory, onChangeFile, onChangeDirectory, handleThrowable, (p, e) -> handleThrowable.accept(p, e), fileSystem);
-	}
-	
-	/**
-	 * Construct a {@link LambdaFileManager} on the given {@link FileSystem} with the given actions.
-	 * 
-	 * @param onAddFile
-	 *            the function to call on newly added files
-	 * @param onAddDirectory
-	 *            the function to call on newly added directories
-	 * @param onRemoveFile
-	 *            the function to call on newly removed files
-	 * @param onRemoveDirectory
-	 *            the function to call on newly removed directories
-	 * @param onChangeFile
-	 *            the function to call on changed files (as detected by the {@link WatchService})
-	 * @param onChangeDirectory
-	 *            the function to call on changed directories (as detected by the {@link WatchService})
-	 * @param handleThrowable
-	 *            the function to call when any of the on* methods throws an exception that is not an instance of
-	 *            {@link IOException}
-	 * @param handleIOException
-	 *            the function to call when any of the on* methods throws an exception that is an instance of
-	 *            {@link IOException}
-	 * @param fileSystem
-	 *            the {@link FileSystem} that the {@link WatchService} will be monitoring
-	 * @throws IOException
-	 *             if an I/O error occurs while initializing the {@link WatchService}
-	 */
-	public LambdaFileManager(IOExceptedConsumer<Path> onAddFile, IOExceptedConsumer<Path> onAddDirectory, IOExceptedConsumer<Path> onRemoveFile, IOExceptedConsumer<Path> onRemoveDirectory,
-			IOExceptedConsumer<Path> onChangeFile, IOExceptedConsumer<Path> onChangeDirectory, BiConsumer<Path, Throwable> handleThrowable, BiConsumer<Path, IOException> handleIOException,
-			FileSystem fileSystem) throws IOException {
 		super(fileSystem);
 		this.onAddFile = Objects.requireNonNull(onAddFile, "onAddFile cannot be null");
 		this.onAddDirectory = Objects.requireNonNull(onAddDirectory, "onAddDirectory cannot be null");
@@ -125,7 +92,6 @@ public class LambdaFileManager extends AbstractFileManager {
 		this.onRemoveFile = Objects.requireNonNull(onRemoveFile, "onRemoveFile cannot be null");
 		this.onRemoveDirectory = Objects.requireNonNull(onRemoveDirectory, "onRemoveDirectory cannot be null");
 		this.handleThrowable = Objects.requireNonNull(handleThrowable, "handleThrowable cannot be null");
-		this.handleIOException = Objects.requireNonNull(handleIOException, "handleIOException cannot be null");
 	}
 	
 	@Override
@@ -161,10 +127,5 @@ public class LambdaFileManager extends AbstractFileManager {
 	@Override
 	protected void handleException(Path path, Throwable t) {
 		handleThrowable.accept(path, t);
-	}
-	
-	@Override
-	protected void handleException(Path path, IOException e) {
-		handleIOException.accept(path, e);
 	}
 }
