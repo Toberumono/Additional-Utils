@@ -27,13 +27,10 @@ import java.util.Set;
 import java.util.Stack;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionService;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -68,10 +65,8 @@ public abstract class AbstractFileManager implements FileManager {
 	private static final Object FILE_PLACEHOLDER = new Object();
 	
 	private final ExecutorService pool;
-	private final CompletionService<Void> cs;
 	private final WatchKeyProcessor watchKeyProcessor;
 	private final WatchEventProcessor watchEventProcessor;
-	private final ErrorHandler errorHandler;
 	private final Map<Path, Object> paths;
 	private final Map<Path, Path> symlinks;
 	private final WatchService watchService;
@@ -168,13 +163,10 @@ public abstract class AbstractFileManager implements FileManager {
 		watchService = fileSystem.newWatchService();
 		watchQueue = new PriorityBlockingQueue<>(4, DEFAULT_KINDS_COMPARATOR);
 		pool = Executors.newWorkStealingPool(maxThreads);
-		cs = new ExecutorCompletionService<>(pool);
 		(watchKeyProcessor = new WatchKeyProcessor()).setDaemon(true);
 		(watchEventProcessor = new WatchEventProcessor()).setDaemon(true);
-		(errorHandler = new ErrorHandler()).setDaemon(true);
 		watchKeyProcessor.start();
 		watchEventProcessor.start();
-		errorHandler.start();
 	}
 	
 	/**
@@ -582,37 +574,6 @@ public abstract class AbstractFileManager implements FileManager {
 		}
 	}
 	
-	private class ErrorHandler extends Thread {
-		
-		public ErrorHandler() {
-			super("ErrorHandler");
-		}
-		
-		@Override
-		public final void run() {
-			try { //Initializing future as null avoids a double-length wait on the first iteration
-				for (Future<Void> future = null; !AbstractFileManager.this.closed; future = cs.poll(watchLoopTimeout, watchLoopTimeoutUnit)) {
-					if (future == null || future.isCancelled())
-						continue;
-					try {
-						future.get();
-					}
-					catch (ExecutionException e) {
-						if (e.getCause() instanceof ProcessorException) {
-							ProcessorException exc = (ProcessorException) e.getCause();
-							handleException(exc.getPath(), exc.getCause());
-						}
-						else
-							handleException(null, e.getCause());
-					}
-				}
-			}
-			catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
-		}
-	}
-	
 	private class WatchEventProcessor extends Thread {
 		
 		public WatchEventProcessor() {
@@ -627,14 +588,25 @@ public abstract class AbstractFileManager implements FileManager {
 						continue;
 					final Path path = (Path) event.context();
 					final WatchEvent.Kind<?> kind = event.kind();
-					cs.submit(() -> {
+					CompletableFuture.runAsync(() -> {
 						try {
 							watchEventProcessor(kind, path);
-							return null; //In order to throw an exception, we must return null here (Makes it Callable instead of Runnable)
 						}
 						catch (IOException e) {
 							throw new ProcessorException(path, e);
 						}
+					}, pool).exceptionally(exc -> {
+						if (exc instanceof CompletionException) {
+							if (exc.getCause() instanceof ProcessorException)
+								exc = exc.getCause();
+							else
+								handleException(null, exc.getCause());
+						}
+						if (exc instanceof ProcessorException)
+							handleException(((ProcessorException) exc).getPath(), exc.getCause());
+						else
+							handleException(null, exc.getCause());
+						return null;
 					});
 				}
 			}
@@ -772,7 +744,7 @@ class ReWrappedWatchEvent implements WatchEvent<Path> {
 	
 }
 
-class ProcessorException extends Exception {
+class ProcessorException extends RuntimeException {
 	private final Path path;
 	
 	public ProcessorException(Path path, Throwable wrapped) {
