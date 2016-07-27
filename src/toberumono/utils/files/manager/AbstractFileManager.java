@@ -284,28 +284,21 @@ public abstract class AbstractFileManager implements FileManager {
 	 */
 	@Override
 	public void add(Path path) throws IOException {
-		Set<Path> resources = null;
+		if (paths.containsKey(path))
+			return;
+		CompletableFuture<Void> active = null;
 		try {
 			closeLock.readLock().lock();
 			if (closed)
 				throw new ClosedFileManagerException();
 			if (!Files.isDirectory(path))
 				throw new NotDirectoryException(path.toString());
-			if (!paths.containsKey(path)) {
-				markActive(resources = analyzeTree(path)); //Just to ensure that once assigned a value, resources are immediately marked as active
-				PathAdder pa = new PathAdder();
-				try {
-					Files.walkFileTree(path, FOLLOW_LINKS_SET, Integer.MAX_VALUE, pa);
-				}
-				catch (IOException e) {
-					pa.rewind(this::rewindAdd);
-					throw e;
-				}
-			}
+			active = markActiveAndWait(analyzeTree(path)); //Just to ensure that once assigned a value, resources are immediately marked as active
+			if (!paths.containsKey(path))
+				innerAdd(path);
 		}
 		finally {
-			if (resources != null)
-				markInactive(resources);
+			markInactive(active);
 			closeLock.readLock().unlock();
 		}
 	}
