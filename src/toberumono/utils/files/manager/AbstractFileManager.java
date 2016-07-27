@@ -84,9 +84,9 @@ public abstract class AbstractFileManager implements FileManager {
 	private final int maxDepth;
 	
 	/**
-	 * Constructs an {@link AbstractFileManager} on the default {@link FileSystem} (retrieved by calling
-	 * {@link FileSystems#getDefault()}) and with a maximum processing {@link Thread} count equal to one half of the
-	 * available processors (retrieved by calling {@link Runtime#availableProcessors()}).
+	 * Constructs an {@link AbstractFileManager} on the default {@link FileSystem} (retrieved by calling {@link FileSystems#getDefault()}) and with a
+	 * maximum processing {@link Thread} count equal to one half of the available processors (retrieved by calling
+	 * {@link Runtime#availableProcessors()}).
 	 * 
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the default {@link FileSystem}
@@ -96,8 +96,9 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	/**
-	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem} and with a maximum processing {@link Thread}
-	 * count equal to one half of the available processors (retrieved by calling {@link Runtime#availableProcessors()}).
+	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem} that ignores hidden files (as defined by
+	 * {@link Files#isHidden(Path)}) and with a maximum processing {@link Thread} count equal to one half of the available processors (retrieved by
+	 * calling {@link Runtime#availableProcessors()}).
 	 * 
 	 * @param fileSystem
 	 *            the {@link FileSystem} on which the {@link AbstractFileManager} will manage files
@@ -109,14 +110,13 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	/**
-	 * Constructs an {@link AbstractFileManager} that ignores hidden files (those with names starting with a '.') on the
-	 * given {@link FileSystem} and with the given maximum processing {@link Thread} count.
+	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem} that ignores hidden files (as defined by
+	 * {@link Files#isHidden(Path)}) and with the given maximum processing {@link Thread} count.
 	 * 
 	 * @param fileSystem
 	 *            the {@link FileSystem} on which the {@link AbstractFileManager} will manage files
 	 * @param maxThreads
-	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use.
-	 *            <i>Must be at least 1</i>
+	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use. <i>Must be at least 1</i>
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
@@ -125,19 +125,16 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	/**
-	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem}, with the given maximum processing
-	 * {@link Thread} count, and the given {@link WatchEvent} {@link Comparator} to use when prioritizing {@link WatchEvent
-	 * WatchEvents} for processing.
+	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem}, with the given maximum processing {@link Thread} count, and the
+	 * given {@link WatchEvent} {@link Comparator} to use when prioritizing {@link WatchEvent WatchEvents} for processing.
 	 * 
 	 * @param fileSystem
 	 *            the {@link FileSystem} on which the {@link AbstractFileManager} will manage files
 	 * @param maxThreads
-	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use.
-	 *            <i>Must be at least 1</i>
+	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use. <i>Must be at least 1</i>
 	 * @param filter
-	 *            a {@link Predicate} that returns {@code true} iff the {@link AbstractFileManager} should process
-	 *            {@link WatchEvent WatchEvents} with the given {@link Path} as their {@link WatchEvent#context() context}
-	 *            (this applies to both files and directories)
+	 *            an {@link IOExceptedPredicate} that returns {@code true} iff the {@link AbstractFileManager} should process {@link WatchEvent
+	 *            WatchEvents} with the given {@link Path} as their {@link WatchEvent#context() context} (this applies to both files and directories)
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
@@ -146,19 +143,16 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	/**
-	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem}, with the given maximum processing
-	 * {@link Thread} count, and the given {@link WatchEvent} {@link Comparator} to use when prioritizing {@link WatchEvent
-	 * WatchEvents} for processing.
+	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem}, with the given maximum processing {@link Thread} count, and the
+	 * given {@link WatchEvent} {@link Comparator} to use when prioritizing {@link WatchEvent WatchEvents} for processing.
 	 * 
 	 * @param fileSystem
 	 *            the {@link FileSystem} on which the {@link AbstractFileManager} will manage files
 	 * @param maxThreads
-	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use.
-	 *            <i>Must be at least 1</i>
+	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use. <i>Must be at least 1</i>
 	 * @param filter
-	 *            a {@link Predicate} that returns {@code true} iff the {@link AbstractFileManager} should process
-	 *            {@link WatchEvent WatchEvents} with the given {@link Path} as their {@link WatchEvent#context() context}
-	 *            (this applies to both files and directories)
+	 *            an {@link IOExceptedPredicate} that returns {@code true} iff the {@link AbstractFileManager} should process {@link WatchEvent
+	 *            WatchEvents} with the given {@link Path} as their {@link WatchEvent#context() context} (this applies to both files and directories)
 	 * @param watchEventKindsComparator
 	 *            the {@link Comparator} to use when prioritizing {@link WatchEvent WatchEvents}
 	 * @throws IOException
@@ -184,8 +178,8 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	/**
-	 * Flags a {@link Path} as being processed by an operation in the {@link AbstractFileManager}. This is used to allow
-	 * multiple operations to run simultaneously provided that they do not contain the same {@link Path}.
+	 * Flags a {@link Path} as being processed by an operation in the {@link AbstractFileManager}. This is used to allow multiple operations to run
+	 * simultaneously provided that they do not contain the same {@link Path}.
 	 * 
 	 * @param path
 	 *            the {@link Path} to mark as active
@@ -203,9 +197,9 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	/**
-	 * Flags a {@link Set} of {@link Path Paths} as being processed by an operation in the {@link AbstractFileManager}. This
-	 * is used to allow multiple operations to run simultaneously provided that they do not contain the same {@link Path}.
-	 * All {@link Path Paths} in the {@link Set} point to the same sync object in the {@link Map}.
+	 * Flags a {@link Set} of {@link Path Paths} as being processed by an operation in the {@link AbstractFileManager}. This is used to allow multiple
+	 * operations to run simultaneously provided that they do not contain the same {@link Path}. All {@link Path Paths} in the {@link Set} point to
+	 * the same sync object in the {@link Map}.
 	 * 
 	 * @param paths
 	 *            the {@link Path Paths} to mark as active
@@ -279,8 +273,7 @@ public abstract class AbstractFileManager implements FileManager {
 	
 	/**
 	 * {@inheritDoc}<br>
-	 * If an error occurs during the operation, all changes made will be reverted to before the operation started via a
-	 * rollback procedure.
+	 * If an error occurs during the operation, all changes made will be reverted to before the operation started via a rollback procedure.
 	 */
 	@Override
 	public void add(Path path) throws IOException {
@@ -316,8 +309,7 @@ public abstract class AbstractFileManager implements FileManager {
 	
 	/**
 	 * {@inheritDoc}<br>
-	 * If an error occurs during the operation, all changes made will be reverted to before the operation started via a
-	 * rollback procedure.
+	 * If an error occurs during the operation, all changes made will be reverted to before the operation started via a rollback procedure.
 	 */
 	@Override
 	public void remove(Path path) throws IOException {
@@ -359,10 +351,10 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	/**
-	 * Overrides of this method should implement the actions to take when a file is added to the {@link FileManager} or
-	 * created in a directory that the {@link FileManager} is watching.<br>
-	 * <b>Note:</b> If this method is called from outside of the {@link FileManager FileManager's} internal {@link #add(Path)
-	 * addition}, {@link #remove(Path) removal}, or update logic, the result is undefined.
+	 * Overrides of this method should implement the actions to take when a file is added to the {@link FileManager} or created in a directory that
+	 * the {@link FileManager} is watching.<br>
+	 * <b>Note:</b> If this method is called from outside of the {@link FileManager FileManager's} internal {@link #add(Path) addition},
+	 * {@link #remove(Path) removal}, or update logic, the result is undefined.
 	 * 
 	 * @param path
 	 *            the {@link Path} to the file being added
@@ -372,8 +364,8 @@ public abstract class AbstractFileManager implements FileManager {
 	protected abstract void onAddFile(Path path) throws IOException;
 	
 	/**
-	 * Overrides of this method should implement the actions to take when a directory is added to the {@link FileManager} or
-	 * created in a directory that the {@link FileManager} is watching.
+	 * Overrides of this method should implement the actions to take when a directory is added to the {@link FileManager} or created in a directory
+	 * that the {@link FileManager} is watching.
 	 * 
 	 * @param path
 	 *            the {@link Path} to the directory being added
@@ -383,8 +375,8 @@ public abstract class AbstractFileManager implements FileManager {
 	protected abstract void onAddDirectory(Path path) throws IOException;
 	
 	/**
-	 * Overrides of this method should implement the actions to take when a file within a directory that the
-	 * {@link FileManager} is watching is changed.
+	 * Overrides of this method should implement the actions to take when a file within a directory that the {@link FileManager} is watching is
+	 * changed.
 	 * 
 	 * @param path
 	 *            the {@link Path} to the file that was changed
@@ -394,8 +386,7 @@ public abstract class AbstractFileManager implements FileManager {
 	protected abstract void onChangeFile(Path path) throws IOException;
 	
 	/**
-	 * Overrides of this method should implement the actions to take when a directory that the {@link FileManager} is
-	 * watching is changed.
+	 * Overrides of this method should implement the actions to take when a directory that the {@link FileManager} is watching is changed.
 	 * 
 	 * @param path
 	 *            the {@link Path} to the directory that was changed
@@ -405,8 +396,8 @@ public abstract class AbstractFileManager implements FileManager {
 	protected abstract void onChangeDirectory(Path path) throws IOException;
 	
 	/**
-	 * Overrides of this method should implement the actions to take when a file is removed from the {@link FileManager} or
-	 * deleted in a directory that the {@link FileManager} is watching.
+	 * Overrides of this method should implement the actions to take when a file is removed from the {@link FileManager} or deleted in a directory
+	 * that the {@link FileManager} is watching.
 	 * 
 	 * @param path
 	 *            the {@link Path} to the file being removed
@@ -416,8 +407,8 @@ public abstract class AbstractFileManager implements FileManager {
 	protected abstract void onRemoveFile(Path path) throws IOException;
 	
 	/**
-	 * Overrides of this method should implement the actions to take when a directory is removed from the {@link FileManager}
-	 * or deleted in a directory that the {@link FileManager} is watching.
+	 * Overrides of this method should implement the actions to take when a directory is removed from the {@link FileManager} or deleted in a
+	 * directory that the {@link FileManager} is watching.
 	 * 
 	 * @param path
 	 *            the {@link Path} to the directory being removed
@@ -427,12 +418,11 @@ public abstract class AbstractFileManager implements FileManager {
 	protected abstract void onRemoveDirectory(Path path) throws IOException;
 	
 	/**
-	 * Overrides of this method should implement logic to handle any exceptions thrown when detected {@link WatchEvent
-	 * WatchEvents} are processed.
+	 * Overrides of this method should implement logic to handle any exceptions thrown when detected {@link WatchEvent WatchEvents} are processed.
 	 * 
 	 * @param path
-	 *            the {@link Path} that was being processed at the time of the exception; if the {@link Path} is not known,
-	 *            this parameter will be {@code null}
+	 *            the {@link Path} that was being processed at the time of the exception; if the {@link Path} is not known, this parameter will be
+	 *            {@code null}
 	 * @param t
 	 *            the thrown exception
 	 */
@@ -443,8 +433,8 @@ public abstract class AbstractFileManager implements FileManager {
 	 * The default implementation forwards to {@link #handleException(Path, Throwable)}.
 	 * 
 	 * @param path
-	 *            the {@link Path} that was being processed at the time of the exception; if the {@link Path} is not known,
-	 *            this parameter will be {@code null}
+	 *            the {@link Path} that was being processed at the time of the exception; if the {@link Path} is not known, this parameter will be
+	 *            {@code null}
 	 * @param e
 	 *            the thrown {@link IOException}
 	 * @see #handleException(Path, Throwable)
