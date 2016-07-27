@@ -510,6 +510,29 @@ public abstract class AbstractFileManager implements FileManager {
 		return expanded;
 	}
 	
+	@Override
+	public void close() throws IOException {
+		if (closed) //If it's already closed, don't bother with the lock
+			return;
+		try {
+			closeLock.writeLock().lock();
+			if (closed)
+				return;
+			closed = true;
+		}
+		finally {
+			closeLock.writeLock().unlock();
+		}
+		try {
+			watchService.close();
+			pool.shutdown();
+			while (!pool.awaitTermination(watchLoopTimeout, watchLoopTimeoutUnit));
+		}
+		catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+	
 	private class PathAdder extends PathUpdater<Path, IOExceptedConsumer<Path>> {
 		
 		@Override
@@ -630,9 +653,16 @@ public abstract class AbstractFileManager implements FileManager {
 					if (key != null) {
 						events = key.pollEvents();
 						key.reset();
-						for (WatchEvent<?> e : events)
-							if (filter.test((Path) e.context()))
-								watchQueue.add(new ReWrappedWatchEvent(e, (Path) key.watchable()));
+						for (WatchEvent<?> event : events) {
+							final Path path = ((Path) key.watchable()).resolve((Path) event.context());
+							try {
+								if (filter.test(path))
+									watchQueue.add(new ReWrappedWatchEvent(event, path));
+							}
+							catch (IOException e) {
+								pool.execute(() -> handleException(path, e));
+							}
+						}
 					}
 				}
 			}
@@ -640,35 +670,9 @@ public abstract class AbstractFileManager implements FileManager {
 				if (!AbstractFileManager.this.closed)
 					throw e;
 			}
-			catch (IOException e) {
-				throw new RuntimeException("Unable to process path information."); //TODO there has to be a better way to handle this
-			}
 			catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
-		}
-	}
-	
-	@Override
-	public void close() throws IOException {
-		if (closed) //If it's already closed, don't bother with the lock
-			return;
-		try {
-			closeLock.writeLock().lock();
-			if (closed)
-				return;
-			closed = true;
-		}
-		finally {
-			closeLock.writeLock().unlock();
-		}
-		try {
-			watchService.close();
-			pool.shutdown();
-			while (!pool.awaitTermination(watchLoopTimeout, watchLoopTimeoutUnit));
-		}
-		catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
 		}
 	}
 	
@@ -720,7 +724,7 @@ class ReWrappedWatchEvent implements WatchEvent<Path> {
 	@SuppressWarnings("unchecked")
 	public ReWrappedWatchEvent(WatchEvent<?> core, Path path) {
 		this.core = (WatchEvent<Path>) core;
-		context = path.resolve(this.core.context());
+		context = path;
 	}
 	
 	@Override
