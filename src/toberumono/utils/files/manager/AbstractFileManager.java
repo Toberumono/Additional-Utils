@@ -68,7 +68,7 @@ public abstract class AbstractFileManager implements FileManager {
 	private final BlockingQueue<WatchEvent<?>> watchQueue;
 	private final ReadWriteLock closeLock;
 	private final Map<Path, CompletableFuture<Void>> activePaths;
-	private transient volatile Set<Path> unmodifiablePaths;
+	private transient volatile Collection<Path> unmodifiablePaths;
 	private final IOExceptedPredicate<Path> filter;
 	private volatile boolean closed;
 	private final int maxDepth;
@@ -192,7 +192,7 @@ public abstract class AbstractFileManager implements FileManager {
 	 *            the {@link Path Paths} to mark as active
 	 * @return a {@link CompletableFuture} that will wait until the requested {@link Path Paths} are available
 	 */
-	protected CompletableFuture<Void> markActiveAndWait(Set<Path> paths) {
+	protected CompletableFuture<Void> markActiveAndWait(Collection<Path> paths) {
 		final CompletableFuture<Void> holder = new CompletableFuture<>();
 		final Set<CompletableFuture<Void>> activeFutures = new HashSet<>();
 		synchronized (activePaths) {
@@ -205,7 +205,7 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	/**
-	 * Helper method for {@link #markActiveAndWait(Path)} and {@link #markActiveAndWait(Set)}.
+	 * Helper method for {@link #markActiveAndWait(Path)} and {@link #markActiveAndWait(Collection)}.
 	 * 
 	 * @param path
 	 *            the {@link Path} being checked
@@ -309,7 +309,7 @@ public abstract class AbstractFileManager implements FileManager {
 				throw new ClosedFileManagerException();
 			if (!Files.isDirectory(path))
 				throw new NotDirectoryException(path.toString());
-			Set<Path> treeAnalysis = analyzeTree(path);
+			Collection<Path> treeAnalysis = analyzeTree(path);
 			active = markActiveAndWait(treeAnalysis); //Just to ensure that once assigned a value, resources are immediately marked as active
 			if (paths.containsKey(path))
 				innerRemove(path, treeAnalysis);
@@ -320,7 +320,7 @@ public abstract class AbstractFileManager implements FileManager {
 		}
 	}
 	
-	private void innerRemove(Path path, Set<Path> treeAnalysis) throws IOException {
+	private void innerRemove(Path path, Collection<Path> treeAnalysis) throws IOException {
 		PathRemover pr = new PathRemover();
 		try {
 			if (!Files.exists(path))
@@ -413,7 +413,7 @@ public abstract class AbstractFileManager implements FileManager {
 	protected abstract void handleException(Path path, Throwable t);
 	
 	@Override
-	public Set<Path> getPaths() {
+	public Collection<Path> getPaths() {
 		if (unmodifiablePaths == null)
 			synchronized (this) {
 				if (unmodifiablePaths == null)
@@ -442,7 +442,7 @@ public abstract class AbstractFileManager implements FileManager {
 		CompletableFuture<Void> active = null;
 		try {
 			if (kind == StandardWatchEventKinds.ENTRY_DELETE) {
-				Set<Path> treeAnalysis = analyzeTree(path);
+				Collection<Path> treeAnalysis = analyzeTree(path);
 				active = markActiveAndWait(treeAnalysis);
 				if (paths.containsKey(path)) {
 					if (paths.get(path) instanceof WatchKey)
@@ -476,8 +476,8 @@ public abstract class AbstractFileManager implements FileManager {
 		}
 	}
 	
-	private Set<Path> analyzeTree(Path root) throws IOException {
-		Set<Path> paths = new HashSet<>();
+	private Collection<Path> analyzeTree(Path root) throws IOException {
+		Collection<Path> paths = new HashSet<>();
 		if (Files.exists(root))
 			Files.walkFileTree(root, Collections.EMPTY_SET, maxDepth, new TreeAnalyzer(paths, root));
 		else //If the root path doesn't exist, then we fall back on our internal path table
@@ -485,14 +485,14 @@ public abstract class AbstractFileManager implements FileManager {
 		return paths;
 	}
 	
-	private void buildPathTreeFromTable(Path root, Set<Path> paths) {
+	private void buildPathTreeFromTable(Path root, Collection<Path> paths) {
 		paths.add(root);
 		for (Path path : this.paths.keySet())
 			if (path.startsWith(root) && symlinks.containsKey(path))
 				buildPathTreeFromTable(symlinks.get(path), paths);
 	}
 	
-	private Set<Path> expandMinimalPathSet(Set<Path> paths) {
+	private Collection<Path> expandMinimalPathSet(Collection<Path> paths) {
 		Set<Path> expanded = new HashSet<>();
 		for (Path path : paths)
 			for (Path p : this.paths.keySet())
@@ -668,10 +668,10 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	private class TreeAnalyzer extends SimpleFileVisitor<Path> {
-		private final Set<Path> paths;
+		private final Collection<Path> paths;
 		private final Stack<Path> route;
 		
-		public TreeAnalyzer(Set<Path> paths, Path root) {
+		public TreeAnalyzer(Collection<Path> paths, Path root) {
 			this.paths = paths;
 			route = new Stack<>();
 			route.push(root);

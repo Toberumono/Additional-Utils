@@ -9,6 +9,7 @@ import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.Set;
@@ -86,5 +87,5 @@ public interface FileManager extends Closeable {
 	/**
 	 * @return an <b>unmodifiable</b> view of the {@link Path Paths} managed by the {@link FileManager}
 	 */
-	public Set<Path> getPaths();
+	public Collection<Path> getPaths();
 }
