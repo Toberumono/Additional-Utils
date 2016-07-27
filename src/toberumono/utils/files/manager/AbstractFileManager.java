@@ -55,11 +55,6 @@ public abstract class AbstractFileManager implements FileManager {
 	 */
 	public static final IOExceptedPredicate<Path> DEFAULT_FILTER = ((IOExceptedPredicate<Path>) Files::isHidden).negate();
 	
-	/**
-	 * The {@link Comparator} used for sorting {@link Path Paths} for use in
-	 * {@link PathUpdater#applyToCollection(Collection, Comparator, IOExceptedPredicate, PathUpdater)}
-	 */
-	private static final Comparator<Path> PATH_COLLECTION_SORTER = (a, b) -> Integer.valueOf(b.getNameCount()).compareTo(Integer.valueOf(a.getNameCount()));
 	private static final long watchLoopTimeout = 500;
 	private static final TimeUnit watchLoopTimeoutUnit = TimeUnit.MILLISECONDS;
 	private static final Object FILE_PLACEHOLDER = new Object();
@@ -317,7 +312,7 @@ public abstract class AbstractFileManager implements FileManager {
 			Set<Path> treeAnalysis = analyzeTree(path);
 			active = markActiveAndWait(treeAnalysis); //Just to ensure that once assigned a value, resources are immediately marked as active
 			if (paths.containsKey(path))
-				innerRemove(path, expandMinimalPathSet(treeAnalysis));
+				innerRemove(path, treeAnalysis);
 		}
 		finally {
 			markInactive(active);
@@ -328,13 +323,10 @@ public abstract class AbstractFileManager implements FileManager {
 	private void innerRemove(Path path, Set<Path> treeAnalysis) throws IOException {
 		PathRemover pr = new PathRemover();
 		try {
-			if (treeAnalysis != null && !Files.exists(path)) {
-				PathUpdater.applyToCollection(treeAnalysis, PATH_COLLECTION_SORTER,
-						p -> this.paths.get(p) instanceof WatchKey, pr);
-			}
-			else {
+			if (!Files.exists(path))
+				pr.applyToCollection(expandMinimalPathSet(treeAnalysis), p -> this.paths.get(p) instanceof WatchKey);
+			else
 				Files.walkFileTree(path, Collections.EMPTY_SET, maxDepth, pr);
-			}
 		}
 		catch (IOException e) {
 			pr.rewind();
@@ -454,7 +446,7 @@ public abstract class AbstractFileManager implements FileManager {
 				active = markActiveAndWait(treeAnalysis);
 				if (paths.containsKey(path)) {
 					if (paths.get(path) instanceof WatchKey)
-						innerRemove(path, expandMinimalPathSet(treeAnalysis));
+						innerRemove(path, treeAnalysis);
 					else
 						onRemoveFile(path);
 				}
@@ -488,9 +480,8 @@ public abstract class AbstractFileManager implements FileManager {
 		Set<Path> paths = new HashSet<>();
 		if (Files.exists(root))
 			Files.walkFileTree(root, Collections.EMPTY_SET, maxDepth, new TreeAnalyzer(paths, root));
-		else { //If the root path doesn't exist, then we fall back on our internal path table
+		else //If the root path doesn't exist, then we fall back on our internal path table
 			buildPathTreeFromTable(root, paths);
-		}
 		return paths;
 	}
 	
