@@ -630,7 +630,9 @@ public abstract class AbstractFileManager implements FileManager {
 					if (key != null) {
 						events = key.pollEvents();
 						key.reset();
-						process((Path) key.watchable(), events);
+						for (WatchEvent<?> e : events)
+							if (filter.test((Path) e.context()))
+								watchQueue.add(new ReWrappedWatchEvent(e, (Path) key.watchable()));
 					}
 				}
 			}
@@ -644,12 +646,6 @@ public abstract class AbstractFileManager implements FileManager {
 			catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
-		}
-		
-		public final void process(Path path, List<WatchEvent<?>> events) throws IOException {
-			for (WatchEvent<?> e : events)
-				if (filter.test((Path) e.context()))
-					watchQueue.add(new ReWrappedWatchEvent(e, path));
 		}
 	}
 	
