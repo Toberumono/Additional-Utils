@@ -604,7 +604,7 @@ public abstract class AbstractFileManager implements FileManager {
 					final WatchEvent.Kind<?> kind = event.kind();
 					CompletableFuture.runAsync(() -> {
 						try {
-							watchEventProcessor(kind, path);
+							processWatchEvent(kind, path);
 						}
 						catch (IOException e) {
 							throw new ProcessorException(path, e);
@@ -648,7 +648,7 @@ public abstract class AbstractFileManager implements FileManager {
 							final Path path = ((Path) key.watchable()).resolve((Path) event.context());
 							try {
 								if (filter.test(path))
-									watchQueue.add(new ReWrappedWatchEvent(event, path));
+									watchQueue.add(new WrappedWatchEvent(event, path));
 							}
 							catch (IOException e) {
 								pool.execute(() -> handleException(path, e));
@@ -708,12 +708,12 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 }
 
-class ReWrappedWatchEvent implements WatchEvent<Path> {
+class WrappedWatchEvent implements WatchEvent<Path> {
 	private final WatchEvent<Path> core;
 	private final Path context;
 	
 	@SuppressWarnings("unchecked")
-	public ReWrappedWatchEvent(WatchEvent<?> core, Path path) {
+	public WrappedWatchEvent(WatchEvent<?> core, Path path) {
 		this.core = (WatchEvent<Path>) core;
 		context = path;
 	}
