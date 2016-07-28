@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.lang.reflect.Array;
 import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.NotDirectoryException;
@@ -60,11 +59,10 @@ public abstract class AbstractFileManager implements FileManager {
 	private static final Object FILE_PLACEHOLDER = new Object();
 	
 	private final ExecutorService pool;
-	private final WatchKeyProcessor watchKeyProcessor;
 	private final WatchEventProcessor watchEventProcessor;
 	private final Map<Path, Object> paths;
 	private final Map<Path, Path> symlinks;
-	private final WatchService watchService;
+	private final Map<FileSystem, WatchService> watchServices;
 	private final BlockingQueue<WatchEvent<?>> watchQueue;
 	private final ReadWriteLock closeLock;
 	private final Map<Path, CompletableFuture<Void>> activePaths;
@@ -74,52 +72,33 @@ public abstract class AbstractFileManager implements FileManager {
 	private final int maxDepth;
 	
 	/**
-	 * Constructs an {@link AbstractFileManager} on the default {@link FileSystem} (retrieved by calling {@link FileSystems#getDefault()}) and with a
-	 * maximum processing {@link Thread} count equal to one half of the available processors (retrieved by calling
-	 * {@link Runtime#availableProcessors()}).
+	 * Constructs an {@link AbstractFileManager} that ignores hidden files (as defined by {@link Files#isHidden(Path)}) and with a maximum processing
+	 * {@link Thread} count equal to one half of the available processors (retrieved by calling {@link Runtime#availableProcessors()}).
 	 * 
-	 * @throws IOException
-	 *             if a {@link WatchService} could not be created on the default {@link FileSystem}
-	 */
-	public AbstractFileManager() throws IOException {
-		this(FileSystems.getDefault());
-	}
-	
-	/**
-	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem} that ignores hidden files (as defined by
-	 * {@link Files#isHidden(Path)}) and with a maximum processing {@link Thread} count equal to one half of the available processors (retrieved by
-	 * calling {@link Runtime#availableProcessors()}).
-	 * 
-	 * @param fileSystem
-	 *            the {@link FileSystem} on which the {@link AbstractFileManager} will manage files
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
-	public AbstractFileManager(FileSystem fileSystem) throws IOException {
-		this(fileSystem, Runtime.getRuntime().availableProcessors() > 1 ? Runtime.getRuntime().availableProcessors() / 2 : 1);
+	public AbstractFileManager() throws IOException {
+		this(Runtime.getRuntime().availableProcessors() > 1 ? Runtime.getRuntime().availableProcessors() / 2 : 1);
 	}
 	
 	/**
 	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem} that ignores hidden files (as defined by
 	 * {@link Files#isHidden(Path)}) and with the given maximum processing {@link Thread} count.
 	 * 
-	 * @param fileSystem
-	 *            the {@link FileSystem} on which the {@link AbstractFileManager} will manage files
 	 * @param maxThreads
 	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use. <i>Must be at least 1</i>
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
-	public AbstractFileManager(FileSystem fileSystem, int maxThreads) throws IOException {
-		this(fileSystem, maxThreads, DEFAULT_FILTER, DEFAULT_KINDS_COMPARATOR);
+	public AbstractFileManager(int maxThreads) throws IOException {
+		this(maxThreads, DEFAULT_FILTER, DEFAULT_KINDS_COMPARATOR);
 	}
 	
 	/**
 	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem}, with the given maximum processing {@link Thread} count, and the
 	 * given {@link WatchEvent} {@link Comparator} to use when prioritizing {@link WatchEvent WatchEvents} for processing.
 	 * 
-	 * @param fileSystem
-	 *            the {@link FileSystem} on which the {@link AbstractFileManager} will manage files
 	 * @param maxThreads
 	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use. <i>Must be at least 1</i>
 	 * @param filter
@@ -128,16 +107,14 @@ public abstract class AbstractFileManager implements FileManager {
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
-	public AbstractFileManager(FileSystem fileSystem, int maxThreads, IOExceptedPredicate<Path> filter) throws IOException {
-		this(fileSystem, maxThreads, filter, DEFAULT_KINDS_COMPARATOR);
+	public AbstractFileManager(int maxThreads, IOExceptedPredicate<Path> filter) throws IOException {
+		this(maxThreads, filter, DEFAULT_KINDS_COMPARATOR);
 	}
 	
 	/**
 	 * Constructs an {@link AbstractFileManager} on the given {@link FileSystem}, with the given maximum processing {@link Thread} count, and the
 	 * given {@link WatchEvent} {@link Comparator} to use when prioritizing {@link WatchEvent WatchEvents} for processing.
 	 * 
-	 * @param fileSystem
-	 *            the {@link FileSystem} on which the {@link AbstractFileManager} will manage files
 	 * @param maxThreads
 	 *            the maximum number of processing {@link Thread Threads} that the {@link AbstractFileManager} can use. <i>Must be at least 1</i>
 	 * @param filter
@@ -148,19 +125,17 @@ public abstract class AbstractFileManager implements FileManager {
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
-	public AbstractFileManager(FileSystem fileSystem, int maxThreads, IOExceptedPredicate<Path> filter, Comparator<WatchEvent<?>> watchEventKindsComparator) throws IOException {
+	public AbstractFileManager(int maxThreads, IOExceptedPredicate<Path> filter, Comparator<WatchEvent<?>> watchEventKindsComparator) throws IOException {
 		paths = new ConcurrentHashMap<>();
 		symlinks = new ConcurrentHashMap<>();
+		watchServices = new ConcurrentHashMap<>();
 		this.filter = filter;
 		maxDepth = Integer.MAX_VALUE;
 		closeLock = new ReentrantReadWriteLock(true); //Ensures that this can be closed
 		activePaths = new ConcurrentHashMap<>();
-		watchService = fileSystem.newWatchService();
 		watchQueue = new PriorityBlockingQueue<>(4, DEFAULT_KINDS_COMPARATOR);
 		pool = Executors.newWorkStealingPool(maxThreads);
-		(watchKeyProcessor = new WatchKeyProcessor()).setDaemon(true);
 		(watchEventProcessor = new WatchEventProcessor()).setDaemon(true);
-		watchKeyProcessor.start();
 		watchEventProcessor.start();
 	}
 	
@@ -422,10 +397,26 @@ public abstract class AbstractFileManager implements FileManager {
 		return unmodifiablePaths;
 	}
 	
+	private WatchService getWatchService(Path path) throws IOException {
+		FileSystem fs = path.getFileSystem();
+		WatchService test = watchServices.get(fs);
+		if (test == null) {
+			synchronized (watchServices) {
+				test = watchServices.get(fs);
+				if (test != null) //Double-checked locking
+					return test;
+				test = path.getFileSystem().newWatchService();
+				watchServices.put(fs, test);
+				new WatchKeyProcessor(test).start();
+			}
+		}
+		return test;
+	}
+	
 	protected final Path register(Path path) throws IOException {
 		if (closed)
 			throw new ClosedFileManagerException();
-		paths.put(path, Files.isDirectory(path) ? path.register(watchService, ALL_STANDARD_KINDS_ARRAY, SensitivityWatchEventModifier.HIGH) : FILE_PLACEHOLDER);
+		paths.put(path, Files.isDirectory(path) ? path.register(getWatchService(path), ALL_STANDARD_KINDS_ARRAY, SensitivityWatchEventModifier.HIGH) : FILE_PLACEHOLDER);
 		return path;
 	}
 	
@@ -448,7 +439,7 @@ public abstract class AbstractFileManager implements FileManager {
 					if (paths.get(path) instanceof WatchKey)
 						innerRemove(path, treeAnalysis);
 					else
-						onRemoveFile(path);
+						onRemoveFile(deregister(path));
 				}
 			}
 			else {
@@ -515,7 +506,8 @@ public abstract class AbstractFileManager implements FileManager {
 			closeLock.writeLock().unlock();
 		}
 		try {
-			watchService.close();
+			for (WatchService ws : watchServices.values())
+				ws.close();
 			pool.shutdown();
 			while (!pool.awaitTermination(watchLoopTimeout, watchLoopTimeoutUnit));
 		}
@@ -631,16 +623,19 @@ public abstract class AbstractFileManager implements FileManager {
 	}
 	
 	private class WatchKeyProcessor extends Thread {
+		private final WatchService watchService;
 		
-		public WatchKeyProcessor() {
+		public WatchKeyProcessor(WatchService watchService) {
 			super("WatchKeyProcessor");
+			this.watchService = watchService;
+			this.setDaemon(true);
 		}
 		
 		@Override
 		public final void run() {
 			try { //Initializing key as null avoids a double-length wait on the first iteration
 				List<WatchEvent<?>> events = null;
-				for (WatchKey key = null; !AbstractFileManager.this.closed; key = watchService.poll(watchLoopTimeout, watchLoopTimeoutUnit)) {
+				for (WatchKey key = watchService.take(); !AbstractFileManager.this.closed; key = watchService.take()) {
 					if (key != null) {
 						events = key.pollEvents();
 						key.reset();
