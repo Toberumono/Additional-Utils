@@ -34,32 +34,17 @@ public class SimpleFileManager extends AbstractFileManager {
 	}
 	
 	/**
-	 * Constructs an {@link SimpleFileManager} on the given {@link FileSystem} and with a maximum processing {@link Thread}
-	 * count equal to one half of the available processors (retrieved by calling {@link Runtime#availableProcessors()}).
-	 * 
-	 * @param fileSystem
-	 *            the {@link FileSystem} on which the {@link SimpleFileManager} will manage files
-	 * @throws IOException
-	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
-	 */
-	public SimpleFileManager(FileSystem fileSystem) throws IOException {
-		super(fileSystem);
-	}
-	
-	/**
 	 * Constructs an {@link SimpleFileManager} that ignores hidden files (those with names starting with a '.') on the given
 	 * {@link FileSystem} and with the given maximum processing {@link Thread} count.
 	 * 
-	 * @param fileSystem
-	 *            the {@link FileSystem} on which the {@link SimpleFileManager} will manage files
 	 * @param maxThreads
 	 *            the maximum number of processing {@link Thread Threads} that the {@link SimpleFileManager} can use. <i>Must
 	 *            be at least 1</i>
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
-	public SimpleFileManager(FileSystem fileSystem, int maxThreads) throws IOException {
-		super(fileSystem, maxThreads);
+	public SimpleFileManager(int maxThreads) throws IOException {
+		super(maxThreads);
 	}
 	
 	/**
@@ -67,8 +52,6 @@ public class SimpleFileManager extends AbstractFileManager {
 	 * {@link Thread} count, and the given {@link WatchEvent} {@link Comparator} to use when prioritizing {@link WatchEvent
 	 * WatchEvents} for processing.
 	 * 
-	 * @param fileSystem
-	 *            the {@link FileSystem} on which the {@link SimpleFileManager} will manage files
 	 * @param maxThreads
 	 *            the maximum number of processing {@link Thread Threads} that the {@link SimpleFileManager} can use. <i>Must
 	 *            be at least 1</i>
@@ -79,8 +62,8 @@ public class SimpleFileManager extends AbstractFileManager {
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
-	public SimpleFileManager(FileSystem fileSystem, int maxThreads, IOExceptedPredicate<Path> filter) throws IOException {
-		super(fileSystem, maxThreads, filter);
+	public SimpleFileManager(int maxThreads, IOExceptedPredicate<Path> filter) throws IOException {
+		super(maxThreads, filter);
 	}
 	
 	/**
@@ -88,8 +71,6 @@ public class SimpleFileManager extends AbstractFileManager {
 	 * {@link Thread} count, and the given {@link WatchEvent} {@link Comparator} to use when prioritizing {@link WatchEvent
 	 * WatchEvents} for processing.
 	 * 
-	 * @param fileSystem
-	 *            the {@link FileSystem} on which the {@link SimpleFileManager} will manage files
 	 * @param maxThreads
 	 *            the maximum number of processing {@link Thread Threads} that the {@link SimpleFileManager} can use. <i>Must
 	 *            be at least 1</i>
@@ -102,8 +83,8 @@ public class SimpleFileManager extends AbstractFileManager {
 	 * @throws IOException
 	 *             if a {@link WatchService} could not be created on the given {@link FileSystem}
 	 */
-	public SimpleFileManager(FileSystem fileSystem, int maxThreads, IOExceptedPredicate<Path> filter, Comparator<WatchEvent<?>> watchEventKindsComparator) throws IOException {
-		super(fileSystem, maxThreads, filter, watchEventKindsComparator);
+	public SimpleFileManager(int maxThreads, IOExceptedPredicate<Path> filter, Comparator<WatchEvent<?>> watchEventKindsComparator) throws IOException {
+		super(maxThreads, filter, watchEventKindsComparator);
 	}
 	
 	@Override

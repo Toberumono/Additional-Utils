@@ -2,7 +2,6 @@ package toberumono.utils.files.manager;
 
 import java.io.IOException;
 import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.WatchService;
 import java.util.Objects;
@@ -11,8 +10,8 @@ import java.util.function.BiConsumer;
 import toberumono.utils.functions.IOExceptedConsumer;
 
 /**
- * An implementation of {@link AbstractFileManager} that forwards additions, changes, and removals to
- * {@link IOExceptedConsumer} lambdas that are supplied on construction.
+ * An implementation of {@link AbstractFileManager} that forwards additions, changes, and removals to {@link IOExceptedConsumer} lambdas that are
+ * supplied on construction.
  * 
  * @author Toberumono
  */
@@ -21,43 +20,21 @@ public class LambdaFileManager extends AbstractFileManager {
 	private final BiConsumer<Path, Throwable> handleThrowable;
 	
 	/**
-	 * Constructs a {@link LambdaFileManager} on the default {@link FileSystem} with the given actions.
+	 * Constructs a {@link LambdaFileManager} with the given actions.
 	 * 
 	 * @param onAdd
 	 *            the function to call on newly added {@link Path Paths} (applies to both files and directories)
 	 * @param onRemove
 	 *            the function to call on newly removed {@link Path Paths} (applies to both files and directories)
 	 * @param onChange
-	 *            the function to call when the {@link WatchService} detects a change in the managed directories
+	 *            the function to call on changed {@link Path Paths} (as detected by the {@link WatchService}, applies to both files and directories)
 	 * @param handleException
 	 *            the function to call when any of the on* methods throws an exception
 	 * @throws IOException
 	 *             if an I/O error occurs while initializing the {@link WatchService}
 	 */
 	public LambdaFileManager(IOExceptedConsumer<Path> onAdd, IOExceptedConsumer<Path> onRemove, IOExceptedConsumer<Path> onChange, BiConsumer<Path, Throwable> handleException) throws IOException {
-		this(onAdd, onRemove, onChange, handleException, FileSystems.getDefault());
-	}
-	
-	/**
-	 * Constructs a {@link LambdaFileManager} on the given {@link FileSystem} with the given actions.
-	 * 
-	 * @param onAdd
-	 *            the function to call on newly added {@link Path Paths} (applies to both files and directories)
-	 * @param onRemove
-	 *            the function to call on newly removed {@link Path Paths} (applies to both files and directories)
-	 * @param onChange
-	 *            the function to call on changed {@link Path Paths} (as detected by the {@link WatchService}, applies to
-	 *            both files and directories)
-	 * @param handleException
-	 *            the function to call when any of the on* methods throws an exception
-	 * @param fileSystem
-	 *            the {@link FileSystem} that the {@link WatchService} will be monitoring
-	 * @throws IOException
-	 *             if an I/O error occurs while initializing the {@link WatchService}
-	 */
-	public LambdaFileManager(IOExceptedConsumer<Path> onAdd, IOExceptedConsumer<Path> onRemove, IOExceptedConsumer<Path> onChange, BiConsumer<Path, Throwable> handleException, FileSystem fileSystem)
-			throws IOException {
-		this(onAdd, onAdd, onRemove, onRemove, onChange, onChange, handleException, fileSystem);
+		this(onAdd, onAdd, onRemove, onRemove, onChange, onChange, handleException);
 	}
 	
 	/**
@@ -77,14 +54,12 @@ public class LambdaFileManager extends AbstractFileManager {
 	 *            the function to call on changed directories (as detected by the {@link WatchService})
 	 * @param handleThrowable
 	 *            the function to call when any of the on* methods throws an exception
-	 * @param fileSystem
-	 *            the {@link FileSystem} that the {@link WatchService} will be monitoring
 	 * @throws IOException
 	 *             if an I/O error occurs while initializing the {@link WatchService}
 	 */
 	public LambdaFileManager(IOExceptedConsumer<Path> onAddFile, IOExceptedConsumer<Path> onAddDirectory, IOExceptedConsumer<Path> onRemoveFile, IOExceptedConsumer<Path> onRemoveDirectory,
-			IOExceptedConsumer<Path> onChangeFile, IOExceptedConsumer<Path> onChangeDirectory, BiConsumer<Path, Throwable> handleThrowable, FileSystem fileSystem) throws IOException {
-		super(fileSystem);
+			IOExceptedConsumer<Path> onChangeFile, IOExceptedConsumer<Path> onChangeDirectory, BiConsumer<Path, Throwable> handleThrowable) throws IOException {
+		super();
 		this.onAddFile = Objects.requireNonNull(onAddFile, "onAddFile cannot be null");
 		this.onAddDirectory = Objects.requireNonNull(onAddDirectory, "onAddDirectory cannot be null");
 		this.onChangeFile = Objects.requireNonNull(onChangeFile, "onChangeFile cannot be null");

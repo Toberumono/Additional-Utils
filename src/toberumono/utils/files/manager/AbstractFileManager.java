@@ -6,6 +6,7 @@ import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.FileSystem;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
@@ -28,13 +29,16 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import com.sun.nio.file.SensitivityWatchEventModifier;
 
@@ -59,13 +63,11 @@ public abstract class AbstractFileManager implements FileManager {
 	private static final Object FILE_PLACEHOLDER = new Object();
 	
 	private final ExecutorService pool;
-	private final WatchEventProcessor watchEventProcessor;
 	private final Map<Path, Object> paths;
 	private final Map<Path, Path> symlinks;
-	private final Map<FileSystem, WatchService> watchServices;
-	private final BlockingQueue<WatchEvent<?>> watchQueue;
+	private final Map<FileSystem, WatchServiceHandler> watchServiceHandlers;
 	private final ReadWriteLock closeLock;
-	private final Map<Path, CompletableFuture<Void>> activePaths;
+	private final Object pathSync = new Object();
 	private transient volatile Collection<Path> unmodifiablePaths;
 	private final IOExceptedPredicate<Path> filter;
 	private volatile boolean closed;
@@ -128,15 +130,11 @@ public abstract class AbstractFileManager implements FileManager {
 	public AbstractFileManager(int maxThreads, IOExceptedPredicate<Path> filter, Comparator<WatchEvent<?>> watchEventKindsComparator) throws IOException {
 		paths = new ConcurrentHashMap<>();
 		symlinks = new ConcurrentHashMap<>();
-		watchServices = new ConcurrentHashMap<>();
+		watchServiceHandlers = new ConcurrentHashMap<>();
 		this.filter = filter;
 		maxDepth = Integer.MAX_VALUE;
 		closeLock = new ReentrantReadWriteLock(true); //Ensures that this can be closed
-		activePaths = new ConcurrentHashMap<>();
-		watchQueue = new PriorityBlockingQueue<>(4, DEFAULT_KINDS_COMPARATOR);
 		pool = Executors.newWorkStealingPool(maxThreads);
-		(watchEventProcessor = new WatchEventProcessor()).setDaemon(true);
-		watchEventProcessor.start();
 	}
 	
 	/**
@@ -146,15 +144,24 @@ public abstract class AbstractFileManager implements FileManager {
 	 * @param path
 	 *            the {@link Path} to mark as active
 	 * @return a {@link CompletableFuture} that should be marked as complete when the operation using the {@link Path Paths} is complete
+	 * @throws IOException
+	 *             if an IO error occurs while creating a {@link WatchService}
 	 */
-	protected final CompletableFuture<Void> markActiveAndWait(Path path) {
+	protected final CompletableFuture<Void> markActiveAndWait(Path path) throws IOException {
 		final CompletableFuture<Void> holder = new CompletableFuture<>();
 		final Set<CompletableFuture<Void>> activeFutures = new HashSet<>();
-		synchronized (activePaths) {
+		synchronized (pathSync) {
 			addActiveFutures(path, holder, activeFutures);
 		}
 		if (activeFutures.size() > 0)
 			CompletableFuture.allOf(activeFutures.toArray((CompletableFuture[]) Array.newInstance(CompletableFuture.class, activeFutures.size()))).join(); //Wait until the paths are available
+		holder.thenRun(() -> {
+			Map<Path, CompletableFuture<Void>> activePaths = watchServiceHandlers.get(path.getFileSystem()).getActivePaths();
+			Iterator<CompletableFuture<Void>> iter = activePaths.values().iterator();
+			for (;iter.hasNext();)
+				if (iter.next() == holder)
+					iter.remove();
+		});
 		return holder;
 	}
 	
@@ -166,16 +173,30 @@ public abstract class AbstractFileManager implements FileManager {
 	 * @param paths
 	 *            the {@link Path Paths} to mark as active
 	 * @return a {@link CompletableFuture} that will wait until the requested {@link Path Paths} are available
+	 * @throws IOException
+	 *             if an IO error occurs while creating a {@link WatchService}
 	 */
-	protected CompletableFuture<Void> markActiveAndWait(Collection<Path> paths) {
+	protected CompletableFuture<Void> markActiveAndWait(Collection<Path> paths) throws IOException {
 		final CompletableFuture<Void> holder = new CompletableFuture<>();
 		final Set<CompletableFuture<Void>> activeFutures = new HashSet<>();
-		synchronized (activePaths) {
-			for (Path path : paths)
+		final Set<FileSystem> added = new HashSet<>();
+		synchronized (pathSync) {
+			for (Path path : paths) {
 				addActiveFutures(path, holder, activeFutures);
+				added.add(path.getFileSystem());
+			}
 		}
 		if (activeFutures.size() > 0)
 			CompletableFuture.allOf(activeFutures.toArray((CompletableFuture[]) Array.newInstance(CompletableFuture.class, activeFutures.size()))).join(); //Wait until the paths are available
+		holder.thenRun(() -> {
+			for (FileSystem fs : added) {
+				Map<Path, CompletableFuture<Void>> activePaths = watchServiceHandlers.get(fs).getActivePaths();
+				Iterator<CompletableFuture<Void>> iter = activePaths.values().iterator();
+				for (;iter.hasNext();)
+					if (iter.next() == holder)
+						iter.remove();
+			}
+		});
 		return holder;
 	}
 	
@@ -189,11 +210,14 @@ public abstract class AbstractFileManager implements FileManager {
 	 *            completes
 	 * @param activeFutures
 	 *            the to which the {@link CompletableFuture CompletableFutures} currently reserving the {@link Path Paths} will be added
+	 * @throws IOException
+	 *             if an error occurs while creating a {@link WatchService}
 	 */
-	private void addActiveFutures(Path path, CompletableFuture<Void> holder, Set<CompletableFuture<Void>> activeFutures) {
+	private void addActiveFutures(Path path, CompletableFuture<Void> holder, Set<CompletableFuture<Void>> activeFutures) throws IOException {
 		Entry<Path, CompletableFuture<Void>> active;
 		CompletableFuture<Void> activeFuture;
 		Path activePath;
+		Map<Path, CompletableFuture<Void>> activePaths = getWatchServiceHandler(path).getActivePaths();
 		for (Iterator<Entry<Path, CompletableFuture<Void>>> iter = activePaths.entrySet().iterator(); iter.hasNext();) {
 			active = iter.next();
 			activePath = active.getKey();
@@ -224,13 +248,6 @@ public abstract class AbstractFileManager implements FileManager {
 		if (active == null)
 			return;
 		active.complete(null);
-		if (!activePaths.containsValue(active)) //This is a quasi-double checked locking structure - we don't want to submit unnecessary tasks
-			return;
-		if (!closed)
-			pool.submit(() -> { //This doesn't need to be synchronized because we're using a ConcurrentHashMap
-				while (activePaths.containsValue(active))
-					activePaths.values().remove(active);
-			});
 	}
 	
 	/**
@@ -246,9 +263,12 @@ public abstract class AbstractFileManager implements FileManager {
 			closeLock.readLock().lock();
 			if (closed)
 				throw new ClosedFileManagerException();
-			if (!Files.isDirectory(path))
+			while (Files.isSymbolicLink(path)) //TODO Might want to add a toggle for this
+				path = Files.readSymbolicLink(path);
+			if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
 				throw new NotDirectoryException(path.toString());
-			active = markActiveAndWait(analyzeTree(path)); //Just to ensure that once assigned a value, resources are immediately marked as active
+			Collection<Path> tree = analyzeTree(path);
+			active = markActiveAndWait(tree); //Just to ensure that once assigned a value, resources are immediately marked as active
 			if (!paths.containsKey(path))
 				innerAdd(path);
 		}
@@ -282,6 +302,8 @@ public abstract class AbstractFileManager implements FileManager {
 			closeLock.readLock().lock();
 			if (closed)
 				throw new ClosedFileManagerException();
+			while (Files.isSymbolicLink(path)) //TODO Might want to add a toggle for this
+				path = Files.readSymbolicLink(path);
 			if (!Files.isDirectory(path))
 				throw new NotDirectoryException(path.toString());
 			Collection<Path> treeAnalysis = analyzeTree(path);
@@ -397,17 +419,17 @@ public abstract class AbstractFileManager implements FileManager {
 		return unmodifiablePaths;
 	}
 	
-	private WatchService getWatchService(Path path) throws IOException {
+	private WatchServiceHandler getWatchServiceHandler(Path path) throws IOException {
 		FileSystem fs = path.getFileSystem();
-		WatchService test = watchServices.get(fs);
+		WatchServiceHandler test = watchServiceHandlers.get(fs);
 		if (test == null) {
-			synchronized (watchServices) {
-				test = watchServices.get(fs);
-				if (test != null) //Double-checked locking
-					return test;
-				test = path.getFileSystem().newWatchService();
-				watchServices.put(fs, test);
-				new WatchKeyProcessor(test).start();
+			synchronized (watchServiceHandlers) {
+				test = watchServiceHandlers.get(fs);
+				if (test == null) {
+					test = new WatchServiceHandler(fs.newWatchService());
+					test.start();
+					watchServiceHandlers.put(fs, test);
+				}
 			}
 		}
 		return test;
@@ -416,7 +438,7 @@ public abstract class AbstractFileManager implements FileManager {
 	protected final Path register(Path path) throws IOException {
 		if (closed)
 			throw new ClosedFileManagerException();
-		paths.put(path, Files.isDirectory(path) ? path.register(getWatchService(path), ALL_STANDARD_KINDS_ARRAY, SensitivityWatchEventModifier.HIGH) : FILE_PLACEHOLDER);
+		paths.put(path, Files.isDirectory(path) ? path.register(getWatchServiceHandler(path).getWatchService(), ALL_STANDARD_KINDS_ARRAY, SensitivityWatchEventModifier.HIGH) : FILE_PLACEHOLDER);
 		return path;
 	}
 	
@@ -429,7 +451,7 @@ public abstract class AbstractFileManager implements FileManager {
 		return path;
 	}
 	
-	protected void watchEventProcessor(WatchEvent.Kind<?> kind, Path path) throws IOException {
+	protected void processWatchEvent(WatchEvent.Kind<?> kind, Path path) throws IOException { //TODO monitor symbolic links for changes
 		CompletableFuture<Void> active = null;
 		try {
 			if (kind == StandardWatchEventKinds.ENTRY_DELETE) {
@@ -506,8 +528,8 @@ public abstract class AbstractFileManager implements FileManager {
 			closeLock.writeLock().unlock();
 		}
 		try {
-			for (WatchService ws : watchServices.values())
-				ws.close();
+			for (WatchServiceHandler handler : watchServiceHandlers.values())
+				handler.stop();
 			pool.shutdown();
 			while (!pool.awaitTermination(watchLoopTimeout, watchLoopTimeoutUnit));
 		}
@@ -534,6 +556,14 @@ public abstract class AbstractFileManager implements FileManager {
 				recordStep(file, AbstractFileManager.this::deregister);
 				onAddFile(file);
 				recordStep(file, AbstractFileManager.this::onRemoveFile);
+				if (attrs.isSymbolicLink()) {
+					file = Files.readSymbolicLink(file);
+					if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
+						symlinks.put(file, file);
+						recordStep(file, symlinks::remove);
+						Files.walkFileTree(file, Collections.EMPTY_SET, maxDepth, this);
+					}
+				}
 			}
 			return FileVisitResult.CONTINUE;
 		}
@@ -566,6 +596,12 @@ public abstract class AbstractFileManager implements FileManager {
 				recordStep(file, AbstractFileManager.this::register);
 				onRemoveFile(file);
 				recordStep(file, AbstractFileManager.this::onAddFile);
+				if (symlinks.containsKey(file)) {
+					final Path removed = symlinks.remove(file);
+					recordStep(file, p -> symlinks.put(p, removed));
+					if (attrs != null)
+						Files.walkFileTree(removed, Collections.EMPTY_SET, maxDepth, this);
+				}
 			}
 			return FileVisitResult.CONTINUE;
 		}
@@ -580,84 +616,119 @@ public abstract class AbstractFileManager implements FileManager {
 		}
 	}
 	
-	private class WatchEventProcessor extends Thread {
-		
-		public WatchEventProcessor() {
-			super("WatchEventProcessor");
-		}
-		
-		@Override
-		public final void run() {
-			try { //Initializing event as null avoids a double-length wait on the first iteration
-				for (WatchEvent<?> event = null; !AbstractFileManager.this.closed; event = watchQueue.poll(watchLoopTimeout, watchLoopTimeoutUnit)) {
-					if (event == null)
-						continue;
-					final Path path = (Path) event.context();
-					final WatchEvent.Kind<?> kind = event.kind();
-					CompletableFuture.runAsync(() -> {
-						try {
-							processWatchEvent(kind, path);
-						}
-						catch (IOException e) {
-							throw new ProcessorException(path, e);
-						}
-					}, pool).exceptionally(exc -> {
-						if (exc instanceof CompletionException) {
-							if (exc.getCause() instanceof ProcessorException)
-								exc = exc.getCause();
-							else
-								handleException(null, exc.getCause());
-						}
-						if (exc instanceof ProcessorException)
-							handleException(((ProcessorException) exc).getPath(), exc.getCause());
-						else
-							handleException(null, exc.getCause());
-						return null;
-					});
-				}
-			}
-			catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
-		}
-	}
-	
-	private class WatchKeyProcessor extends Thread {
+	private class WatchServiceHandler {
+		private final Map<Path, CompletableFuture<Void>> activePaths;
+		private final BlockingQueue<WatchEvent<Path>> queue;
+		private final WatchKeyProcessor keyProcessor;
+		private final WatchEventProcessor eventProcessor;
 		private final WatchService watchService;
+		private volatile boolean closed;
 		
-		public WatchKeyProcessor(WatchService watchService) {
-			super("WatchKeyProcessor");
+		public WatchServiceHandler(WatchService watchService) {
 			this.watchService = watchService;
-			this.setDaemon(true);
+			activePaths = new ConcurrentHashMap<>();
+			queue = new PriorityBlockingQueue<>(4, DEFAULT_KINDS_COMPARATOR);
+			(eventProcessor = new WatchEventProcessor()).setDaemon(true);
+			(keyProcessor = new WatchKeyProcessor()).setDaemon(true);
 		}
 		
-		@Override
-		public final void run() {
-			try { //Initializing key as null avoids a double-length wait on the first iteration
-				List<WatchEvent<?>> events = null;
-				for (WatchKey key = watchService.take(); !AbstractFileManager.this.closed; key = watchService.take()) {
-					if (key != null) {
-						events = key.pollEvents();
-						key.reset();
-						for (WatchEvent<?> event : events) {
-							final Path path = ((Path) key.watchable()).resolve((Path) event.context());
+		public void start() {
+			eventProcessor.start();
+			keyProcessor.start();
+		}
+		
+		public void stop() throws IOException {
+			closed = true;
+			watchService.close();
+		}
+		
+		public WatchService getWatchService() {
+			return watchService;
+		}
+		
+		public Map<Path, CompletableFuture<Void>> getActivePaths() {
+			return activePaths;
+		}
+		
+		private class WatchEventProcessor extends Thread {
+			
+			public WatchEventProcessor() {
+				super("WatchEventProcessor");
+			}
+			
+			@Override
+			public final void run() {
+				try { //Initializing event as null avoids a double-length wait on the first iteration
+					for (WatchEvent<Path> event = queue.poll(watchLoopTimeout, watchLoopTimeoutUnit); !closed; event = queue.poll(watchLoopTimeout, watchLoopTimeoutUnit)) {
+						if (event == null)
+							continue;
+						final Path path = event.context();
+						final WatchEvent.Kind<?> kind = event.kind();
+						CompletableFuture.runAsync(() -> {
 							try {
-								if (filter.test(path))
-									watchQueue.add(new WrappedWatchEvent(event, path));
+								processWatchEvent(kind, path);
 							}
 							catch (IOException e) {
-								pool.execute(() -> handleException(path, e));
+								throw new ProcessorException(path, e);
+							}
+						}, pool).exceptionally(exc -> {
+							if (exc instanceof CompletionException) {
+								if (exc.getCause() instanceof ProcessorException)
+									exc = exc.getCause();
+								else
+									handleException(null, exc.getCause());
+							}
+							if (exc instanceof ProcessorException)
+								handleException(((ProcessorException) exc).getPath(), exc.getCause());
+							else
+								handleException(null, exc.getCause());
+							return null;
+						});
+					}
+				}
+				catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+				finally {
+					queue.clear();
+				}
+			}
+		}
+		
+		private class WatchKeyProcessor extends Thread {
+			
+			public WatchKeyProcessor() {
+				super("WatchKeyProcessor");
+			}
+			
+			@Override
+			public final void run() {
+				try { //Initializing key as null avoids a double-length wait on the first iteration
+					List<WatchEvent<?>> events;
+					for (WatchKey key = watchService.take(); !closed; key = watchService.take()) {
+						if (key != null) {
+							events = key.pollEvents();
+							key.reset();
+							for (WatchEvent<?> event : events) {
+								final Path path = ((Path) key.watchable()).resolve((Path) event.context());
+								try {
+									if (filter.test(path))
+										queue.add(new WrappedWatchEvent(event, path));
+								}
+								catch (IOException e) {
+									pool.execute(() -> handleException(path, e));
+								}
 							}
 						}
 					}
 				}
-			}
-			catch (ClosedWatchServiceException e) {
-				if (!AbstractFileManager.this.closed)
-					throw e;
-			}
-			catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
+				catch (ClosedWatchServiceException e) {
+					if (!closed)
+						throw e;
+				}
+				catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
 			}
 		}
 	}
@@ -688,8 +759,11 @@ public abstract class AbstractFileManager implements FileManager {
 				return FileVisitResult.CONTINUE;
 			if (!file.startsWith(route.peek()))
 				paths.add(file);
-			if (attrs.isSymbolicLink())
-				Files.walkFileTree(Files.readSymbolicLink(file), Collections.EMPTY_SET, maxDepth, this);
+			if (attrs.isSymbolicLink()) {
+				file = Files.readSymbolicLink(file);
+				if (Files.exists(file, LinkOption.NOFOLLOW_LINKS))
+					Files.walkFileTree(file, Collections.EMPTY_SET, maxDepth, this);
+			}
 			return FileVisitResult.CONTINUE;
 		}
 		

@@ -20,7 +20,7 @@ public class LoggedFileManager extends AbstractFileManager {
 	private final Logger logger;
 	
 	/**
-	 * Creates a {@link LoggedFileManager} on the default {@link FileSystem} with the {@link Logger} returned by
+	 * Creates a {@link LoggedFileManager} with the {@link Logger} returned by
 	 * {@code Logger.getLogger(LoggedFileManager.class.getName())}.
 	 * 
 	 * @throws IOException
@@ -31,20 +31,7 @@ public class LoggedFileManager extends AbstractFileManager {
 	}
 	
 	/**
-	 * Creates a {@link LoggedFileManager} on the given {@link FileSystem} with the {@link Logger} returned by
-	 * {@code Logger.getLogger(LoggedFileManager.class.getName())}.
-	 * 
-	 * @param fileSystem
-	 *            the {@link FileSystem} on which the {@link LoggedFileManager} will manage files
-	 * @throws IOException
-	 *             if a {@link WatchService} could not be created on the default {@link FileSystem}
-	 */
-	public LoggedFileManager(FileSystem fileSystem) throws IOException {
-		this(Logger.getLogger(LoggedFileManager.class.getName()), fileSystem);
-	}
-	
-	/**
-	 * Creates a {@link LoggedFileManager} on the default {@link FileSystem} with the given {@link Logger}.
+	 * Creates a {@link LoggedFileManager} with the given {@link Logger}.
 	 * 
 	 * @param logger
 	 *            the {@link Logger} to use
@@ -53,21 +40,6 @@ public class LoggedFileManager extends AbstractFileManager {
 	 */
 	public LoggedFileManager(Logger logger) throws IOException {
 		super();
-		this.logger = logger;
-	}
-	
-	/**
-	 * Creates a {@link LoggedFileManager} on the given {@link FileSystem} with the given {@link Logger}.
-	 * 
-	 * @param logger
-	 *            the {@link Logger} to use
-	 * @param fileSystem
-	 *            the {@link FileSystem} on which the {@link LoggedFileManager} will manage files
-	 * @throws IOException
-	 *             if a {@link WatchService} could not be created on the default {@link FileSystem}
-	 */
-	public LoggedFileManager(Logger logger, FileSystem fileSystem) throws IOException {
-		super(fileSystem);
 		this.logger = logger;
 	}
 	
