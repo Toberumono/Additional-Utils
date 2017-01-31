@@ -11,28 +11,30 @@ import java.util.function.Consumer;
  *            the type of the first argument
  */
 @FunctionalInterface
-public interface IOExceptedConsumer<T> {
+public interface IOExceptedConsumer<T> extends ExceptedConsumer<T> {
 	
 	/**
-	 * Applies this function to the given argument.
+	 * Performs this operation on the given argument.
 	 *
 	 * @param t
-	 *            the argument
+	 *            the input argument
 	 * @throws IOException
 	 *             if something goes wrong
 	 */
+	@Override
 	public void accept(T t) throws IOException;
 	
 	/**
-	 * Applies this function to the given argument.<br>
+	 * Performs this operation on the given argument.<br>
 	 * Forwards to {@link #accept(Object)}.
 	 *
 	 * @param t
-	 *            the argument
+	 *            the input argument
 	 * @throws IOException
 	 *             if something goes wrong
 	 * @see #accept(Object)
 	 */
+	@Override
 	@Deprecated
 	public default void apply(T t) throws IOException {
 		accept(t);
@@ -47,7 +49,8 @@ public interface IOExceptedConsumer<T> {
 	 *            wrapper
 	 * @return a {@link Consumer} that wraps this {@link IOExceptedConsumer}
 	 */
-	public default Consumer<T> toBiConsumer(boolean printStackTrace) {
+	@Override
+	public default Consumer<T> toConsumer(boolean printStackTrace) {
 		if (printStackTrace)
 			return t -> {
 				try {

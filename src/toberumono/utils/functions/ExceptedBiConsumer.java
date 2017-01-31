@@ -15,24 +15,25 @@ import java.util.function.BiConsumer;
 public interface ExceptedBiConsumer<T, U> {
 	
 	/**
-	 * Applies this function to the given arguments.
+	 * Performs this operation on the given arguments.
 	 *
 	 * @param t
-	 *            the first argument
+	 *            the first input argument
 	 * @param u
-	 *            the second argument
+	 *            the second input argument
 	 * @throws Exception
 	 *             if something goes wrong
 	 */
 	public void accept(T t, U u) throws Exception;
 	
 	/**
-	 * Applies this function to the given arguments.
+	 * Performs this operation on the given arguments.<br>
+	 * Forwards to {@link #accept(Object, Object)}
 	 *
 	 * @param t
-	 *            the first argument
+	 *            the first input argument
 	 * @param u
-	 *            the second argument
+	 *            the second input argument
 	 * @throws Exception
 	 *             if something goes wrong
 	 */

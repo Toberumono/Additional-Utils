@@ -76,6 +76,20 @@ public interface ExceptedBiPredicate<T, U> {
 	}
 	
 	/**
+	 * @return a {@link BiPredicate} that wraps any thrown {@link Exception Exceptions} in a {@link RuntimeException}
+	 */
+	public default BiPredicate<T, U> toWrappingBiPredicate() {
+		return (t, u) -> {
+			try {
+				return this.test(t, u);
+			}
+			catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		};
+	}
+	
+	/**
 	 * Returns a {@link BiPredicate} that wraps this {@link ExceptedBiPredicate} and returns {@code false} if an {@link Exception} would have been
 	 * thrown and optionally prints the stack trace of said {@link Exception}.
 	 * 
