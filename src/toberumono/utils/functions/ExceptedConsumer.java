@@ -13,17 +13,17 @@ import java.util.function.Consumer;
 public interface ExceptedConsumer<T> {
 	
 	/**
-	 * Applies this function to the given argument.
+	 * Performs this operation on the given argument.
 	 *
 	 * @param t
-	 *            the argument
+	 *            the input argument
 	 * @throws Exception
 	 *             if something goes wrong
 	 */
 	public void accept(T t) throws Exception;
 	
 	/**
-	 * Applies this function to the given argument.<br>
+	 * Performs this operation on the given argument.<br>
 	 * Forwards to {@link #accept(Object)}.
 	 *
 	 * @param t
