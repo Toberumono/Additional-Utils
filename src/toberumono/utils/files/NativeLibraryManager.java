@@ -90,7 +90,7 @@ public final class NativeLibraryManager {
 				addSource(p.resolve("native libraries"));
 			}
 			else if (fname.endsWith(".jar") || fname.endsWith(".zip")) {
-				try (FileSystem jar = FileSystems.newFileSystem(p, null)) {
+				try (FileSystem jar = FileSystems.newFileSystem(p, (ClassLoader) null)) {
 					for (Path root : jar.getRootDirectories())
 						addSource(root.resolve("native libraries"));
 				}
